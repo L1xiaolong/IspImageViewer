@@ -1,7 +1,6 @@
 /build*/
 /out/
 /vcpkg_installed/
-/test_images/
 /CMakeUserPresets.json
 .DS_Store
 *.user
