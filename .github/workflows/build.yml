@@ -1,0 +1,48 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            preset: windows-debug
+            benchmarks: 'ON'
+          - os: macos-15
+            preset: macos-debug
+            benchmarks: 'OFF'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.9.0'
+          cache: true
+      - name: Configure
+        run: >-
+          cmake --preset ${{ matrix.preset }}
+          -DISPVIEW_BUILD_BENCHMARKS=${{ matrix.benchmarks }}
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }}
+      - name: Require native D3D11 RAW/YUV acceptance
+        if: runner.os == 'Windows'
+        shell: pwsh
+        timeout-minutes: 5
+        run: ctest --preset windows-rhi-acceptance --verbose
+      - name: Exercise 4K Loader and D3D11 pipeline
+        if: runner.os == 'Windows'
+        shell: pwsh
+        timeout-minutes: 10
+        run: ./build/windows-debug/tools/Debug/ispview_gpu_benchmark.exe --bayer --pipeline
+      - name: Exercise 4K MainWindow navigation on D3D11
+        if: runner.os == 'Windows'
+        shell: pwsh
+        timeout-minutes: 10
+        run: ./build/windows-debug/tools/Debug/ispview_ui_benchmark.exe

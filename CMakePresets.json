@@ -1,0 +1,98 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "macos-debug",
+      "displayName": "macOS arm64 Debug",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/macos-preset-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_OSX_ARCHITECTURES": "arm64",
+        "BUILD_TESTING": "ON"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      }
+    },
+    {
+      "name": "macos-release",
+      "displayName": "macOS arm64 Release",
+      "inherits": "macos-debug",
+      "binaryDir": "${sourceDir}/build/macos-preset-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "OFF",
+        "ISPVIEW_BUILD_BENCHMARKS": "ON"
+      }
+    },
+    {
+      "name": "windows-debug",
+      "displayName": "Windows x64 Debug",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/windows-debug",
+      "cacheVariables": {
+        "BUILD_TESTING": "ON"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "windows-release",
+      "displayName": "Windows x64 Release",
+      "inherits": "windows-debug",
+      "binaryDir": "${sourceDir}/build/windows-release",
+      "cacheVariables": {
+        "BUILD_TESTING": "OFF",
+        "ISPVIEW_BUILD_BENCHMARKS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "macos-debug", "configurePreset": "macos-debug" },
+    { "name": "macos-release", "configurePreset": "macos-release" },
+    { "name": "windows-debug", "configurePreset": "windows-debug", "configuration": "Debug" },
+    { "name": "windows-release", "configurePreset": "windows-release", "configuration": "Release" }
+  ],
+  "testPresets": [
+    {
+      "name": "macos-debug",
+      "configurePreset": "macos-debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "windows-debug",
+      "configurePreset": "windows-debug",
+      "configuration": "Debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "macos-rhi-acceptance",
+      "displayName": "macOS native Metal acceptance",
+      "configurePreset": "macos-debug",
+      "filter": { "include": { "name": "^ispview_render_tests$" } },
+      "environment": { "ISPVIEW_REQUIRE_NATIVE_RHI_TESTS": "1" },
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "windows-rhi-acceptance",
+      "displayName": "Windows native Direct3D 11 acceptance",
+      "configurePreset": "windows-debug",
+      "configuration": "Debug",
+      "filter": { "include": { "name": "^ispview_render_tests$" } },
+      "environment": { "ISPVIEW_REQUIRE_NATIVE_RHI_TESTS": "1" },
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}
