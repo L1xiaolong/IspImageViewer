@@ -1,5 +1,6 @@
 #include "render/image_canvas.h"
 #include "render/bayer_render_parameters.h"
+#include "render/navigation_thumbnail_overlay.h"
 #include "render/yuv_render_parameters.h"
 
 #include <QFile>
@@ -178,10 +179,14 @@ void ImageCanvas::setFrame(ImageFramePtr frame, bool resetView) {
         state_.fitMode = FitMode::Fit;
         state_.normalizedCenter = {0.5, 0.5};
     }
+    if (navigationThumbnailOverlay_) {
+        navigationThumbnailOverlay_->setFrame(frame_);
+    }
     roiOverlay_->update();
     if (hadRoi && !state_.normalizedRoi) {
         emit roiChanged({}, false);
     }
+    updateNavigationThumbnail();
     update();
 }
 
@@ -238,6 +243,15 @@ void ImageCanvas::actualPixels() {
     notifyStateChanged();
 }
 
+void ImageCanvas::setNavigationThumbnailEnabled(bool enabled) {
+    navigationThumbnailEnabled_ = enabled;
+    if (enabled && !navigationThumbnailOverlay_) {
+        navigationThumbnailOverlay_ = new NavigationThumbnailOverlay(this);
+        navigationThumbnailOverlay_->setFrame(frame_);
+    }
+    updateNavigationThumbnail();
+}
+
 void ImageCanvas::setRoiSelectionEnabled(bool enabled) {
     roiSelectionEnabled_ = enabled;
     roiSelecting_ = false;
@@ -284,6 +298,7 @@ void ImageCanvas::setViewState(const ViewState& state, bool notify) {
     if (previousRoi != state_.normalizedRoi) {
         emit roiChanged(state_.normalizedRoi.value_or(QRectF{}), state_.normalizedRoi.has_value());
     }
+    updateNavigationThumbnail();
     if (notify) {
         notifyStateChanged();
     } else {
@@ -425,8 +440,8 @@ void ImageCanvas::render(QRhiCommandBuffer* commandBuffer) {
         matrix.scale(0.0F);
     }
     updates->updateDynamicBuffer(uniformBuffer_.get(), 0, 64, matrix.constData());
-    const std::array<float, 8> compareParameters{static_cast<float>(compareMode_), compareAmount_,
-                                                 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F};
+    const std::array<float, 8> compareParameters{
+        static_cast<float>(compareMode_), compareAmount_, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F};
     updates->updateDynamicBuffer(compareUniformBuffer_.get(), 0, 32, compareParameters.data());
     const bool comparisonRequested = compareMode_ != ImageCompareMode::Single;
     const bool useYuvComparison = comparisonRequested && gpuYuvReady_ && comparisonGpuYuvReady_;
@@ -612,6 +627,7 @@ void ImageCanvas::resizeEvent(QResizeEvent* event) {
     QRhiWidget::resizeEvent(event);
     roiOverlay_->setGeometry(rect());
     roiOverlay_->raise();
+    updateNavigationThumbnail();
 }
 
 void ImageCanvas::resetRhiResources() {
@@ -951,8 +967,29 @@ ViewState ImageCanvas::effectiveViewState() const {
 
 void ImageCanvas::notifyStateChanged() {
     roiOverlay_->update();
+    updateNavigationThumbnail();
     update();
     emit viewStateChanged(effectiveViewState());
+}
+
+void ImageCanvas::updateNavigationThumbnail() {
+    if (!navigationThumbnailOverlay_) {
+        return;
+    }
+
+    const ViewState state = effectiveViewState();
+    const QSize imageSize = logicalImageSize();
+    const bool visible =
+        navigationThumbnailEnabled_ && hasDisplayableFrame() && state.fitMode != FitMode::Fit;
+    if (!visible) {
+        navigationThumbnailOverlay_->hide();
+        return;
+    }
+
+    navigationThumbnailOverlay_->setView(state, size(), imageSize);
+    navigationThumbnailOverlay_->layoutWithin(rect(), imageSize);
+    navigationThumbnailOverlay_->show();
+    navigationThumbnailOverlay_->raise();
 }
 
 QPointF ImageCanvas::normalizedImagePoint(const QPointF& widgetPosition) const {
@@ -976,8 +1013,8 @@ bool ImageCanvas::isNearCompareDivider(const QPointF& widgetPosition) const {
         compareMode_ == ImageCompareMode::VerticalSplit
             ? QPointF(compareAmount_ * imageSize.width(), imageSize.height() * 0.5)
             : QPointF(imageSize.width() * 0.5, compareAmount_ * imageSize.height());
-    const QPointF seamWidgetPoint = ViewTransform::imageToWidget(
-        seamImagePoint, size(), imageSize, effectiveViewState());
+    const QPointF seamWidgetPoint =
+        ViewTransform::imageToWidget(seamImagePoint, size(), imageSize, effectiveViewState());
     return compareMode_ == ImageCompareMode::VerticalSplit
                ? std::abs(widgetPosition.x() - seamWidgetPoint.x()) <= hitRadius
                : std::abs(widgetPosition.y() - seamWidgetPoint.y()) <= hitRadius;
@@ -985,9 +1022,8 @@ bool ImageCanvas::isNearCompareDivider(const QPointF& widgetPosition) const {
 
 void ImageCanvas::updateCompareAmount(const QPointF& widgetPosition) {
     const QPointF normalized = normalizedImagePoint(widgetPosition);
-    setCompareAmount(static_cast<float>(compareMode_ == ImageCompareMode::VerticalSplit
-                                            ? normalized.x()
-                                            : normalized.y()));
+    setCompareAmount(static_cast<float>(
+        compareMode_ == ImageCompareMode::VerticalSplit ? normalized.x() : normalized.y()));
 }
 
 void ImageCanvas::updateRoiSelection(const QPointF& widgetPosition) {

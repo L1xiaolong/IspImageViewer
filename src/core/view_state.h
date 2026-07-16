@@ -32,6 +32,9 @@ class ViewTransform final {
                                           const QSize& imageSize);
     [[nodiscard]] static ViewState panBy(const ViewState& state, const QPointF& widgetDelta,
                                          const QSize& imageSize);
+    [[nodiscard]] static QRectF visibleNormalizedRect(const QSize& viewportSize,
+                                                      const QSize& imageSize,
+                                                      const ViewState& state);
     [[nodiscard]] static QPointF clampedCenter(QPointF center);
     [[nodiscard]] static std::optional<QRectF> clampedNormalizedRoi(QRectF roi);
 };

@@ -3,6 +3,8 @@ qt_add_library(ispview_render STATIC
     bayer_render_parameters.cpp
     image_canvas.h
     image_canvas.cpp
+    navigation_thumbnail_overlay.h
+    navigation_thumbnail_overlay.cpp
     yuv_render_parameters.h
     yuv_render_parameters.cpp
 )

@@ -22,6 +22,7 @@ class CoreTests final : public QObject {
     void fitScalePreservesAspectRatio();
     void cursorAnchoredZoomPreservesImagePoint();
     void panUsesImageScale();
+    void visibleNormalizedRectTracksZoomAndEdges();
     void synchronizationCanBeConfigured();
     void weightedCacheEvictsLeastRecentlyUsed();
     void rawFrameSizesRespectFormatAndStride();
@@ -38,6 +39,26 @@ class CoreTests final : public QObject {
 void CoreTests::fitScalePreservesAspectRatio() {
     QCOMPARE(ViewTransform::fitScale({4000, 3000}, {1000, 1000}), 0.25);
     QCOMPARE(ViewTransform::fitScale({1000, 2000}, {1000, 500}), 0.25);
+}
+
+void CoreTests::visibleNormalizedRectTracksZoomAndEdges() {
+    ViewState state;
+    state.fitMode = FitMode::Manual;
+    state.pixelsPerImagePixel = 2.0;
+    state.normalizedCenter = {0.5, 0.5};
+
+    const QRectF centered = ViewTransform::visibleNormalizedRect({400, 300}, {400, 300}, state);
+    QCOMPARE(centered, QRectF(0.25, 0.25, 0.5, 0.5));
+
+    state.normalizedCenter = {0.0, 0.0};
+    const QRectF clipped = ViewTransform::visibleNormalizedRect({400, 300}, {400, 300}, state);
+    QCOMPARE(clipped, QRectF(0.0, 0.0, 0.25, 0.25));
+
+    state.pixelsPerImagePixel = 0.5;
+    state.normalizedCenter = {0.5, 0.5};
+    QCOMPARE(ViewTransform::visibleNormalizedRect({400, 300}, {400, 300}, state),
+             QRectF(0.0, 0.0, 1.0, 1.0));
+    QVERIFY(ViewTransform::visibleNormalizedRect({}, {400, 300}, state).isEmpty());
 }
 
 void CoreTests::comparisonPixelProbeMapsDifferentSizesAndRawOrientation() {

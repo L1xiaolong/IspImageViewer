@@ -5,6 +5,7 @@
 #include "io/raw_preset_store.h"
 #include "platform/platform_services.h"
 #include "render/image_canvas.h"
+#include "render/navigation_thumbnail_overlay.h"
 #include "ui/compare_window.h"
 #include "ui/full_screen_window.h"
 #include "ui/histogram_panel.h"
@@ -1458,13 +1459,22 @@ void UiTests::imageCanvasWheelPanFitAndResizePreserveFrame() {
     ImageCanvas canvas;
     canvas.resize(200, 160);
     canvas.setFrame(frame);
+    QVERIFY(!canvas.navigationThumbnailEnabled());
+    canvas.setNavigationThumbnailEnabled(true);
+    auto* navigation =
+        canvas.findChild<NavigationThumbnailOverlay*>(QStringLiteral("navigationThumbnailOverlay"));
+    QVERIFY(navigation != nullptr);
+    QVERIFY(navigation->isHidden());
     QCOMPARE(canvas.viewState().pixelsPerImagePixel, 2.0);
     canvas.actualPixels();
     QCOMPARE(canvas.viewState().fitMode, FitMode::Manual);
     QCOMPARE(canvas.viewState().pixelsPerImagePixel, 1.0);
+    QVERIFY(!navigation->isHidden());
+    QCOMPARE(navigation->zoomText(), QStringLiteral("100%"));
     canvas.fitImage();
     QCOMPARE(canvas.viewState().fitMode, FitMode::Fit);
     QCOMPARE(canvas.viewState().pixelsPerImagePixel, 2.0);
+    QVERIFY(navigation->isHidden());
 
     const QPointF anchor(45.0, 55.0);
     const QPointF beforePoint = ViewTransform::widgetToImage(
@@ -1477,6 +1487,7 @@ void UiTests::imageCanvasWheelPanFitAndResizePreserveFrame() {
     QCOMPARE(changed.size(), 1);
     QCOMPARE(canvas.viewState().fitMode, FitMode::Manual);
     QVERIFY(canvas.viewState().pixelsPerImagePixel > 2.0);
+    QVERIFY(!navigation->isHidden());
     const QPointF afterPoint = ViewTransform::widgetToImage(
         anchor, canvas.size(), canvas.logicalImageSize(), canvas.viewState());
     QVERIFY(QLineF(beforePoint, afterPoint).length() < 0.0001);
@@ -1487,6 +1498,38 @@ void UiTests::imageCanvasWheelPanFitAndResizePreserveFrame() {
     QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, QPoint(120, 90));
     QVERIFY(canvas.viewState().normalizedCenter != centerBeforePan);
     QVERIFY(changed.size() >= 2);
+
+    ViewState overviewState = canvas.viewState();
+    overviewState.pixelsPerImagePixel = 4.0;
+    overviewState.normalizedCenter = {0.5, 0.5};
+    canvas.setViewState(overviewState, false);
+    QCOMPARE(navigation->normalizedViewportRect(), QRectF(0.25, 0.25, 0.5, 0.5));
+    QCOMPARE(navigation->zoomText(), QStringLiteral("400%"));
+    QCOMPARE(navigation->geometry().left(), 12);
+    QCOMPARE(canvas.height() - navigation->geometry().bottom() - 1, 12);
+
+    QImage navigationPaint(navigation->size(), QImage::Format_ARGB32_Premultiplied);
+    navigationPaint.fill(Qt::transparent);
+    navigation->render(&navigationPaint);
+    bool hasTranslucentPixels = false;
+    bool hasViewportStroke = false;
+    const QRectF thumbnailRect = QRectF(navigation->rect()).adjusted(5.0, 5.0, -5.0, -5.0);
+    const int expectedViewportLeft = qRound(
+        thumbnailRect.left() + navigation->normalizedViewportRect().left() * thumbnailRect.width());
+    for (int y = 0; y < navigationPaint.height(); ++y) {
+        for (int x = 0; x < navigationPaint.width(); ++x) {
+            const QColor pixel = navigationPaint.pixelColor(x, y);
+            hasTranslucentPixels =
+                hasTranslucentPixels || (pixel.alpha() > 0 && pixel.alpha() < 255);
+            if (std::abs(x - expectedViewportLeft) <= 2 && y > thumbnailRect.top() + 4 &&
+                y < thumbnailRect.bottom() - 4 && pixel.red() > 200 && pixel.green() > 200 &&
+                pixel.blue() > 200) {
+                hasViewportStroke = true;
+            }
+        }
+    }
+    QVERIFY(hasTranslucentPixels);
+    QVERIFY(hasViewportStroke);
 
     canvas.resize(320, 240);
     QCoreApplication::processEvents();
@@ -1513,8 +1556,17 @@ void UiTests::compareWindowProvidesImmersiveTwoImageControls() {
     auto* firstCanvas = window.findChild<ImageCanvas*>(QStringLiteral("compareCanvas0"));
     auto* secondCanvas = window.findChild<ImageCanvas*>(QStringLiteral("compareCanvas1"));
     QVERIFY(firstCanvas && secondCanvas);
+    QVERIFY(firstCanvas->navigationThumbnailEnabled());
+    QVERIFY(secondCanvas->navigationThumbnailEnabled());
     const QList<ImageCanvas*> canvases{firstCanvas, secondCanvas};
     QTRY_VERIFY_WITH_TIMEOUT(firstCanvas->frame() && secondCanvas->frame(), 5000);
+    auto* firstNavigation = firstCanvas->findChild<NavigationThumbnailOverlay*>(
+        QStringLiteral("navigationThumbnailOverlay"));
+    auto* secondNavigation = secondCanvas->findChild<NavigationThumbnailOverlay*>(
+        QStringLiteral("navigationThumbnailOverlay"));
+    QVERIFY(firstNavigation && secondNavigation);
+    QVERIFY(firstNavigation->isHidden());
+    QVERIFY(secondNavigation->isHidden());
 
     ViewState state = canvases.at(0)->viewState();
     state.fitMode = FitMode::Manual;
@@ -1523,6 +1575,10 @@ void UiTests::compareWindowProvidesImmersiveTwoImageControls() {
     canvases.at(0)->setViewState(state, true);
     QTRY_COMPARE_WITH_TIMEOUT(canvases.at(1)->viewState().pixelsPerImagePixel, 3.0, 2000);
     QCOMPARE(canvases.at(1)->viewState().normalizedCenter, QPointF(0.25, 0.75));
+    QVERIFY(!firstNavigation->isHidden());
+    QVERIFY(!secondNavigation->isHidden());
+    QCOMPARE(firstNavigation->zoomText(), QStringLiteral("300%"));
+    QCOMPARE(secondNavigation->zoomText(), QStringLiteral("300%"));
 
     auto* hold = window.findChild<QToolButton*>(QStringLiteral("holdComparisonButton"));
     auto* leftPixel = window.findChild<QLabel*>(QStringLiteral("comparePixelOverlay0"));
@@ -1545,6 +1601,12 @@ void UiTests::compareWindowProvidesImmersiveTwoImageControls() {
     QVERIFY(informationLayout != nullptr);
     QVERIFY(informationLayout->indexOf(leftInfo) < informationLayout->indexOf(leftExif));
     QVERIFY(informationLayout->indexOf(leftExif) < informationLayout->indexOf(leftHistogram));
+    auto* paneLayout = qobject_cast<QGridLayout*>(firstCanvas->parentWidget()->layout());
+    QVERIFY(paneLayout != nullptr);
+    const QLayoutItem* pixelItem = paneLayout->itemAt(paneLayout->indexOf(leftPixel));
+    QVERIFY(pixelItem != nullptr);
+    QVERIFY(pixelItem->alignment().testFlag(Qt::AlignRight));
+    QVERIFY(pixelItem->alignment().testFlag(Qt::AlignBottom));
 
     QVERIFY(QMetaObject::invokeMethod(canvases.constFirst(), "pixelHovered", Qt::DirectConnection,
                                       Q_ARG(QPoint, QPoint(3, 2)), Q_ARG(QColor, QColor(Qt::red)),
@@ -2067,12 +2129,21 @@ void UiTests::fullScreenNavigatesEncodedImagesWithKeyboardAndButtons() {
     ImageLoader loader(decoder);
     FullScreenWindow window(&loader, {redPath, bluePath}, 0);
     auto* canvas = window.findChild<ImageCanvas*>();
+    auto* navigation =
+        window.findChild<NavigationThumbnailOverlay*>(QStringLiteral("navigationThumbnailOverlay"));
     auto* fileName = window.findChild<QLabel*>(QStringLiteral("fullScreenFileName"));
     auto* position = window.findChild<QLabel*>(QStringLiteral("fullScreenPosition"));
     auto* previous = window.findChild<QToolButton*>(QStringLiteral("fullScreenPreviousImage"));
     auto* next = window.findChild<QToolButton*>(QStringLiteral("fullScreenNextImage"));
-    QVERIFY(canvas && fileName && position && previous && next);
+    QVERIFY(canvas && navigation && fileName && position && previous && next);
+    QVERIFY(canvas->navigationThumbnailEnabled());
     QTRY_VERIFY_WITH_TIMEOUT(canvas->frame() != nullptr, 3000);
+    QVERIFY(navigation->isHidden());
+    canvas->actualPixels();
+    QVERIFY(!navigation->isHidden());
+    QCOMPARE(navigation->zoomText(), QStringLiteral("100%"));
+    canvas->fitImage();
+    QVERIFY(navigation->isHidden());
     QCOMPARE(canvas->frame()->metadata.fileName, QStringLiteral("01-red.png"));
     QCOMPARE(fileName->text(), QStringLiteral("01-red.png"));
     QCOMPARE(position->text(), QStringLiteral("1 / 2"));

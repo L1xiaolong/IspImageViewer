@@ -98,6 +98,7 @@ FullScreenWindow::FullScreenWindow(ImageLoader* loader, QStringList paths, int i
       panelHideTimer_(new QTimer(this)), paths_(std::move(paths)) {
     setAttribute(Qt::WA_DeleteOnClose);
     setCentralWidget(canvas_);
+    canvas_->setNavigationThumbnailEnabled(true);
     canvas_->setContextMenuPolicy(Qt::CustomContextMenu);
     canvas_->installEventFilter(this);
     buildEdgePanels();

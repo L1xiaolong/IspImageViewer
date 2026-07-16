@@ -17,11 +17,11 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMessageBox>
-#include <QPointer>
 #include <QPixmap>
+#include <QPointer>
 #include <QPushButton>
-#include <QStatusBar>
 #include <QStandardPaths>
+#include <QStatusBar>
 #include <QToolBar>
 #include <QToolButton>
 #include <QToolTip>
@@ -94,18 +94,19 @@ CompareWindow::CompareWindow(ImageLoader* loader, const QStringList& paths, QWid
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setHorizontalSpacing(2);
     layout->setVerticalSpacing(2);
-    central->setStyleSheet(
-        QStringLiteral("QWidget#compareCentral { background-color: white; }"));
+    central->setStyleSheet(QStringLiteral("QWidget#compareCentral { background-color: white; }"));
     const int columns = boundedPaths.size() == 4 ? 2 : static_cast<int>(boundedPaths.size());
     for (int slot = 0; slot < boundedPaths.size(); ++slot) {
         auto* pane = new QFrame(central);
         pane->setObjectName(QStringLiteral("comparePane%1").arg(slot));
-        pane->setStyleSheet(QStringLiteral("QFrame#comparePane%1 { background: black; }").arg(slot));
+        pane->setStyleSheet(
+            QStringLiteral("QFrame#comparePane%1 { background: black; }").arg(slot));
         auto* paneLayout = new QGridLayout(pane);
         paneLayout->setContentsMargins(0, 0, 0, 0);
 
         auto* canvas = new ImageCanvas(pane);
         canvas->setObjectName(QStringLiteral("compareCanvas%1").arg(slot));
+        canvas->setNavigationThumbnailEnabled(true);
         paneLayout->addWidget(canvas, 0, 0);
 
         auto* informationOverlay = new QWidget(pane);
@@ -142,7 +143,7 @@ CompareWindow::CompareWindow(ImageLoader* loader, const QStringList& paths, QWid
         applyOutlinedText(pixelLabel);
         pixelLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
         pixelLabel->hide();
-        paneLayout->addWidget(pixelLabel, 0, 0, Qt::AlignLeft | Qt::AlignBottom);
+        paneLayout->addWidget(pixelLabel, 0, 0, Qt::AlignRight | Qt::AlignBottom);
 
         layout->addWidget(pane, slot / columns, slot % columns);
         panes_.append(pane);
@@ -361,14 +362,14 @@ void CompareWindow::updatePixelOverlays(int sourceSlot, const QPoint& pixel) {
         if (!frames_.at(slot)) {
             continue;
         }
-        const ComparisonPixelSample sample = ComparisonPixelProbe::sample(*frames_.at(slot), normalized);
+        const ComparisonPixelSample sample =
+            ComparisonPixelProbe::sample(*frames_.at(slot), normalized);
         pixelLabels_.at(slot)->setText(
-            sample.valid
-                ? QStringLiteral("(%1, %2)  %3  •  %4")
-                      .arg(sample.displayPixel.x())
-                      .arg(sample.displayPixel.y())
-                      .arg(sample.sourceValueText(), sample.displayValueText())
-                : QStringLiteral("Outside image"));
+            sample.valid ? QStringLiteral("(%1, %2)  %3  •  %4")
+                               .arg(sample.displayPixel.x())
+                               .arg(sample.displayPixel.y())
+                               .arg(sample.sourceValueText(), sample.displayValueText())
+                         : QStringLiteral("Outside image"));
     }
 }
 
@@ -402,8 +403,8 @@ void CompareWindow::setPresentationMode(PresentationMode mode) {
     canvases_.at(0)->setComparisonFrame(frames_.value(1));
     canvases_.at(0)->setCompareAmount(0.5F);
     canvases_.at(0)->setCompareMode(mode == PresentationMode::VerticalSplit
-                                       ? ImageCompareMode::VerticalSplit
-                                       : ImageCompareMode::HorizontalSplit);
+                                        ? ImageCompareMode::VerticalSplit
+                                        : ImageCompareMode::HorizontalSplit);
 }
 
 void CompareWindow::setHoldComparison(bool active) {
@@ -432,8 +433,8 @@ void CompareWindow::saveScreenshot() {
         return;
     }
 
-    const QString defaultFileName = QStringLiteral("screen_shot_%1.png").arg(
-        QDateTime::currentMSecsSinceEpoch());
+    const QString defaultFileName =
+        QStringLiteral("screen_shot_%1.png").arg(QDateTime::currentMSecsSinceEpoch());
     QString initialDirectory = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
     if (initialDirectory.isEmpty()) {
         initialDirectory = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
@@ -455,9 +456,8 @@ void CompareWindow::saveScreenshot() {
     const QString filePath = dialog.selectedFiles().constFirst();
 
     if (!screenshot.save(filePath, "PNG")) {
-        QMessageBox::warning(
-            this, QStringLiteral("Screenshot"),
-            QStringLiteral("Unable to save the screenshot:\n%1").arg(filePath));
+        QMessageBox::warning(this, QStringLiteral("Screenshot"),
+                             QStringLiteral("Unable to save the screenshot:\n%1").arg(filePath));
         return;
     }
 

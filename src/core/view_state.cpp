@@ -67,6 +67,26 @@ ViewState ViewTransform::panBy(const ViewState& state, const QPointF& widgetDelt
     return result;
 }
 
+QRectF ViewTransform::visibleNormalizedRect(const QSize& viewportSize, const QSize& imageSize,
+                                            const ViewState& state) {
+    if (viewportSize.isEmpty() || imageSize.isEmpty() || state.pixelsPerImagePixel <= 0.0) {
+        return {};
+    }
+
+    const QPointF topLeft = widgetToImage(QPointF(0.0, 0.0), viewportSize, imageSize, state);
+    const QPointF bottomRight = widgetToImage(QPointF(viewportSize.width(), viewportSize.height()),
+                                              viewportSize, imageSize, state);
+    const QRectF visiblePixels =
+        QRectF(topLeft, bottomRight).normalized().intersected(QRectF(QPointF{}, imageSize));
+    if (visiblePixels.isEmpty()) {
+        return {};
+    }
+
+    return QRectF(visiblePixels.x() / imageSize.width(), visiblePixels.y() / imageSize.height(),
+                  visiblePixels.width() / imageSize.width(),
+                  visiblePixels.height() / imageSize.height());
+}
+
 QPointF ViewTransform::clampedCenter(QPointF center) {
     center.setX(std::clamp(center.x(), 0.0, 1.0));
     center.setY(std::clamp(center.y(), 0.0, 1.0));

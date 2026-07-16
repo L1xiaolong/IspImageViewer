@@ -26,6 +26,7 @@ QT_END_NAMESPACE
 namespace ispview {
 
 class RoiOverlay;
+class NavigationThumbnailOverlay;
 
 enum class ImageCompareMode {
     Single = 0,
@@ -51,6 +52,8 @@ class ImageCanvas final : public QRhiWidget {
 
     void fitImage();
     void actualPixels();
+    void setNavigationThumbnailEnabled(bool enabled);
+    [[nodiscard]] bool navigationThumbnailEnabled() const { return navigationThumbnailEnabled_; }
     void setRoiSelectionEnabled(bool enabled);
     [[nodiscard]] bool roiSelectionEnabled() const { return roiSelectionEnabled_; }
     void clearRoi();
@@ -93,6 +96,7 @@ class ImageCanvas final : public QRhiWidget {
     [[nodiscard]] bool hasDisplayableFrame() const;
     [[nodiscard]] ViewState effectiveViewState() const;
     void notifyStateChanged();
+    void updateNavigationThumbnail();
     void updatePixelProbe(const QPointF& widgetPosition);
     [[nodiscard]] QPointF normalizedImagePoint(const QPointF& widgetPosition) const;
     [[nodiscard]] bool isNearCompareDivider(const QPointF& widgetPosition) const;
@@ -115,10 +119,12 @@ class ImageCanvas final : public QRhiWidget {
     bool compareDividerDragging_ = false;
     bool roiSelectionEnabled_ = false;
     bool roiSelecting_ = false;
+    bool navigationThumbnailEnabled_ = false;
     QPointF lastMousePosition_;
     QPointF roiStartWidgetPosition_;
     QPointF roiStartNormalized_;
     RoiOverlay* roiOverlay_ = nullptr;
+    NavigationThumbnailOverlay* navigationThumbnailOverlay_ = nullptr;
 
     QRhi* rhi_ = nullptr;
     std::unique_ptr<QRhiBuffer> vertexBuffer_;
