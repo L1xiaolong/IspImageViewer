@@ -101,6 +101,18 @@ current lightweight MVP. They are not listed by the browser or accepted by the e
 
 ## Build on macOS
 
+Recommended wrapper:
+
+```sh
+./build_macos.sh debug --test
+./build_macos.sh release
+```
+
+The wrapper configures and builds the matching CMake preset. Use `./build_macos.sh --help` for
+`--clean`, `--rhi`, and `-j N`.
+
+Equivalent raw CMake commands:
+
 ```sh
 cmake --preset macos-debug
 cmake --build --preset macos-debug
@@ -153,6 +165,16 @@ Local `test_images` data is intentionally ignored by Git.
 ## Build on Windows
 
 Use the same Visual Studio 2022 x64 presets as CI:
+
+```pwsh
+.\build_windows.ps1 -Mode debug -Test
+.\build_windows.ps1 -Mode release
+```
+
+The wrapper configures and builds the matching CMake preset. Use `.\build_windows.ps1 -Help` for
+`-Clean`, `-Rhi`, and `-Jobs N`.
+
+Equivalent raw CMake commands:
 
 ```pwsh
 cmake --preset windows-debug
