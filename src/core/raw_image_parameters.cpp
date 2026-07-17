@@ -71,8 +71,7 @@ bool RawImageParameters::hasValidOrientation() const {
 }
 
 QString RawImageParameters::cacheKey() const {
-    QString result =
-        QStringLiteral("%1x%2|%3|%4|%5|%6|%7|%8|%9|%10|%11|%12|%13|%14|%15|%16")
+    QString result = QStringLiteral("%1x%2|%3|%4|%5|%6|%7|%8|%9|%10|%11|%12|%13|%14|%15|%16")
                          .arg(size.width())
                          .arg(size.height())
                          .arg(static_cast<int>(format))
@@ -92,6 +91,7 @@ QString RawImageParameters::cacheKey() const {
     if (isYuv()) {
         return result;
     }
+    result += QLatin1Char('|') + QString::number(demosaic);
     for (double gain : whiteBalanceGains) {
         result += QLatin1Char('|') + QString::number(gain, 'g', 17);
     }

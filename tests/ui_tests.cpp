@@ -1009,16 +1009,20 @@ void UiTests::rawThumbnailLoadsAutomaticallyFromSidecar() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
     const QString path = directory.filePath(QStringLiteral("capture.yuv"));
+
+    constexpr int width = 400;
+    constexpr int height = 300;
+    constexpr qsizetype frameBytes = width * height * 3 / 2;
     QFile file(path);
     QVERIFY(file.open(QIODevice::WriteOnly));
-    QVERIFY(file.write(QByteArray(24, static_cast<char>(128))) == 24);
+    QCOMPARE(file.write(QByteArray(frameBytes, static_cast<char>(128))), frameBytes);
     file.close();
 
     RawImageParameters parameters;
-    parameters.size = {4, 4};
+    parameters.size = {width, height};
     parameters.format = RawPixelFormat::NV12;
-    parameters.rowStride = 4;
-    parameters.chromaStride = 4;
+    parameters.rowStride = width;
+    parameters.chromaStride = width;
     QString error;
     QVERIFY2(RawPresetStore::saveSidecar(path, parameters, &error), qPrintable(error));
 
@@ -1030,8 +1034,9 @@ void UiTests::rawThumbnailLoadsAutomaticallyFromSidecar() {
 
     const QPixmap initial = model.index(0).data(Qt::DecorationRole).value<QPixmap>();
     QCOMPARE(initial.size(), QSize(160, 120));
-    QTRY_COMPARE_WITH_TIMEOUT(model.index(0).data(Qt::DecorationRole).value<QPixmap>().size(),
-                              QSize(4, 4), 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(model.index(0).data(ThumbnailModel::DimensionsRole).toSize(),
+                              QSize(width, height), 5000);
+    QCOMPARE(model.index(0).data(Qt::DecorationRole).value<QPixmap>().size(), QSize(160, 120));
     QVERIFY(loader.rawParameters(path).has_value());
 }
 
@@ -1043,6 +1048,9 @@ void UiTests::mainWindowUsesDockForUnconfiguredRawParameters() {
     QVERIFY(file.open(QIODevice::WriteOnly));
     QCOMPARE(file.write(QByteArray(24, static_cast<char>(128))), 24);
     file.close();
+    QImage png(4, 4, QImage::Format_RGBA8888);
+    png.fill(QColor(32, 64, 96, 255));
+    QVERIFY(png.save(directory.filePath(QStringLiteral("photo.png"))));
 
     MainWindow window(createDefaultImageDecoder(), directory.path());
     window.show();
@@ -1113,6 +1121,25 @@ void UiTests::mainWindowUsesDockForUnconfiguredRawParameters() {
     QCOMPARE(rawTable->topLevelItem(0)->text(0), QStringLiteral("Format"));
     QVERIFY(properties->findChild<QSpinBox*>(QStringLiteral("rawPanelWidth")) == nullptr);
     QVERIFY(!QApplication::activeModalWidget());
+
+    QVERIFY(panel->isEnabled());
+    QCOMPARE(panel->sourcePath(), path);
+    QModelIndex pngIndex;
+    for (int row = 0; row < thumbnailView->model()->rowCount(); ++row) {
+        const QModelIndex candidate = thumbnailView->model()->index(row, 0);
+        if (candidate.data(ThumbnailModel::PathRole).toString() ==
+            directory.filePath(QStringLiteral("photo.png"))) {
+            pngIndex = candidate;
+            break;
+        }
+    }
+    QVERIFY(pngIndex.isValid());
+    thumbnailView->selectionModel()->setCurrentIndex(pngIndex, QItemSelectionModel::ClearAndSelect |
+                                                                   QItemSelectionModel::Current);
+    QTRY_COMPARE_WITH_TIMEOUT(panel->sourcePath(), QString{}, 5000);
+    QVERIFY(!panel->isEnabled());
+    QVERIFY(!action->isEnabled());
+    QVERIFY(dock->isVisible());
 }
 
 void UiTests::mainWindowBuildsCurrentDisplayHistogram() {
@@ -2044,8 +2071,14 @@ void UiTests::rawParameterPanelEmitsDebouncedSingleFrameParameters() {
     raw.colorCorrectionMatrix = {1.1, -0.1, 0.0, -0.05, 1.05, 0.0, 0.0, -0.2, 1.2};
     raw.displayGamma = 2.4;
     panel.setSource(QStringLiteral("/tmp/frame.raw"), raw);
+    auto* demosaic = panel.findChild<QCheckBox*>(QStringLiteral("rawPanelDemosaic"));
+    QVERIFY(demosaic != nullptr);
+    QVERIFY(!demosaic->isChecked());
+    raw.demosaic = true;
+    panel.setSource(QStringLiteral("/tmp/frame.raw"), raw);
     const RawImageParameters roundTrip = panel.parameters();
     QCOMPARE(roundTrip.orientation, ImageOrientation::Rotate90Clockwise);
+    QVERIFY(roundTrip.demosaic);
     QCOMPARE(roundTrip.blackLevel, 64);
     QCOMPARE(roundTrip.whiteLevel, 4095);
     QCOMPARE(roundTrip.whiteBalanceGains, raw.whiteBalanceGains);
@@ -2071,6 +2104,7 @@ void UiTests::rawParameterPanelEmitsDebouncedSingleFrameParameters() {
     presetParameters.format = RawPixelFormat::Raw16;
     presetParameters.validBitsOverride = 12;
     presetParameters.whiteLevel = 4095;
+    presetParameters.demosaic = true;
     QVERIFY(RawPresetStore::saveNamedPreset(presetName, presetParameters));
     panel.refreshPresets();
     auto* preset = panel.findChild<QComboBox*>(QStringLiteral("rawConfigurationPreset"));
@@ -2079,6 +2113,7 @@ void UiTests::rawParameterPanelEmitsDebouncedSingleFrameParameters() {
     const int changesBeforePreset = changeCount;
     preset->setCurrentIndex(preset->findText(presetName));
     QCOMPARE(changeCount, changesBeforePreset + 1);
+    QVERIFY(panel.parameters().demosaic);
 
     bool saveDialogHandled = false;
     QTimer::singleShot(0, this, [&] {

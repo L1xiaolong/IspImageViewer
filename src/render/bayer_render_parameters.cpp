@@ -38,6 +38,7 @@ std::array<float, 28> makeBayerRenderUniformData(const RawImageParameters& param
     for (std::size_t channel = 0; channel < parameters.whiteBalanceGains.size(); ++channel) {
         values[12 + channel] = static_cast<float>(parameters.whiteBalanceGains[channel]);
     }
+    values[15] = parameters.demosaic ? 1.0F : 0.0F;
 
     // GLSL matrices are column-major. The public parameter is row-major, so each std140
     // vec4 below receives one matrix column and leaves its padding component at zero.

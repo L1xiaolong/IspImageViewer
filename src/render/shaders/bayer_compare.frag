@@ -138,6 +138,10 @@ float candidateDisplayValue(ivec2 pixel) {
 vec3 primaryDisplayRgb(vec2 displayUv) {
     ivec2 size = ivec2(round(primaryImageAndStorage.xy));
     ivec2 center = primaryPixel(displayUv);
+    if (primaryWhiteBalance.w < 0.5) {
+        float encoded = pow(primaryDisplayValue(center), 1.0 / primaryLevelsAndGamma.z);
+        return vec3(encoded);
+    }
     vec3 sums = vec3(0.0);
     vec3 counts = vec3(0.0);
     for (int dy = -1; dy <= 1; ++dy) {
@@ -156,6 +160,10 @@ vec3 primaryDisplayRgb(vec2 displayUv) {
 vec3 candidateDisplayRgb(vec2 displayUv) {
     ivec2 size = ivec2(round(candidateImageAndStorage.xy));
     ivec2 center = candidatePixel(displayUv);
+    if (candidateWhiteBalance.w < 0.5) {
+        float encoded = pow(candidateDisplayValue(center), 1.0 / candidateLevelsAndGamma.z);
+        return vec3(encoded);
+    }
     vec3 sums = vec3(0.0);
     vec3 counts = vec3(0.0);
     for (int dy = -1; dy <= 1; ++dy) {

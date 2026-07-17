@@ -68,6 +68,8 @@ void populateRawTable(QTreeWidget* table, const RawImageParameters& parameters) 
         addRawField(table, QStringLiteral("Valid Bits"), QString::number(parameters.validBits()));
         addRawField(table, QStringLiteral("Bayer Pattern"),
                     bayerPatternName(parameters.bayerPattern));
+        addRawField(table, QStringLiteral("Demosaic"),
+                    parameters.demosaic ? QStringLiteral("Yes") : QStringLiteral("No"));
         addRawField(table, QStringLiteral("Black Level"), QString::number(parameters.blackLevel));
         addRawField(table, QStringLiteral("White Level"), QString::number(parameters.whiteLevel));
         addRawField(table, QStringLiteral("White Balance"),

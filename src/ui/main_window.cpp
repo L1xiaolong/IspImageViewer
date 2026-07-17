@@ -545,6 +545,8 @@ void MainWindow::connectInterface() {
                 if (current.isValid()) {
                     if (current.data(ThumbnailModel::DirectoryRole).toBool()) {
                         currentPath_.clear();
+                        rawParametersAction_->setEnabled(false);
+                        rawConfigurationPanel_->clearSource();
                         previewCanvas_->setFrame({});
                         imagePropertiesPanel_->setFrame({});
                         return;
@@ -619,6 +621,8 @@ void MainWindow::openDirectory(const QString& path, bool addToHistory) {
     directoryWatcher_->addPath(currentDirectory_);
 
     currentPath_.clear();
+    rawParametersAction_->setEnabled(false);
+    rawConfigurationPanel_->clearSource();
     previewCanvas_->setFrame({});
     imagePropertiesPanel_->setFrame({});
     thumbnailModel_->setFiles({});
@@ -811,6 +815,7 @@ void MainWindow::loadPreview(const QString& path, bool resetView) {
     }
     if (suffix != QStringLiteral("raw") && suffix != QStringLiteral("yuv")) {
         rawParametersAction_->setEnabled(false);
+        rawConfigurationPanel_->clearSource();
     }
     imagePropertiesPanel_->setFrame({});
     const quint64 generation = ++previewGeneration_;
@@ -857,6 +862,7 @@ bool MainWindow::ensureRawParameters(const QString& path, bool showPanel) {
     const QString suffix = QFileInfo(path).suffix().toLower();
     if (suffix != QStringLiteral("raw") && suffix != QStringLiteral("yuv")) {
         rawParametersAction_->setEnabled(false);
+        rawConfigurationPanel_->clearSource();
         return true;
     }
     rawParametersAction_->setEnabled(true);

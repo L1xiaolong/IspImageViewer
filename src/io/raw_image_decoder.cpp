@@ -228,6 +228,9 @@ QImage convertBayer(const QByteArray& bytes, const RawImageParameters& parameter
                               static_cast<double>(maximum - parameters.blackLevel),
                           0.0, 1.0);
     };
+    const auto encodedRaw = [&](int x, int y) {
+        return std::pow(normalized(x, y), 1.0 / parameters.displayGamma);
+    };
 
     QImage image(outputSize, QImage::Format_RGBA8888);
     const bool fullSize = outputSize == parameters.size;
@@ -242,6 +245,14 @@ QImage convertBayer(const QByteArray& bytes, const RawImageParameters& parameter
                 fullSize ? y
                          : std::clamp(static_cast<int>((y + 0.5) * height / outputSize.height()), 0,
                                       height - 1);
+            if (!parameters.demosaic) {
+                const uchar gray = static_cast<uchar>(toByte(encodedRaw(centerX, centerY)));
+                destination[x * 4 + 0] = gray;
+                destination[x * 4 + 1] = gray;
+                destination[x * 4 + 2] = gray;
+                destination[x * 4 + 3] = 255;
+                continue;
+            }
             double channels[3]{};
             int counts[3]{};
             for (int dy = -1; dy <= 1; ++dy) {
@@ -370,6 +381,7 @@ DecodeResult RawImageDecoder::decode(const DecodeRequest& request) const {
     frame->metadata.fileSize = info.size();
     frame->metadata.modifiedAt = info.lastModified();
     frame->metadata.decoderName = QStringLiteral("ISPView RAW/YUV");
+    frame->metadata.sourceSize = logicalDisplaySize;
     frame->rawParameters = parameters;
     if (request.purpose != DecodePurpose::Full) {
         frame->storage = std::move(display);

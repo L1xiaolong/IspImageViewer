@@ -246,9 +246,12 @@ void CoreTests::rawDisplayTransformValidationAndCacheIdentity() {
     QVERIFY(raw.hasValidBitLayout());
     QVERIFY(raw.cacheKey() != identityKey);
     const QString raw14Key = raw.cacheKey();
+    raw.demosaic = true;
+    QVERIFY(raw.cacheKey() != raw14Key);
+    const QString demosaicKey = raw.cacheKey();
     raw.whiteBalanceGains[0] = 2.0;
     QVERIFY(raw.hasValidDisplayTransform());
-    QVERIFY(raw.cacheKey() != raw14Key);
+    QVERIFY(raw.cacheKey() != demosaicKey);
     const QString whiteBalancedKey = raw.cacheKey();
     raw.colorCorrectionMatrix[1] = -0.25;
     QVERIFY(raw.cacheKey() != whiteBalancedKey);

@@ -86,6 +86,11 @@ void main() {
     vec2 sourceUv = sourceUvForOrientation(uv);
     ivec2 center =
         clamp(ivec2(floor(sourceUv * vec2(imageSize))), ivec2(0), imageSize - ivec2(1));
+    if (whiteBalance.w < 0.5) {
+        float encoded = pow(normalizedRaw(center), 1.0 / levelsAndGamma.z);
+        fragColor = vec4(vec3(encoded), 1.0);
+        return;
+    }
     vec3 sums = vec3(0.0);
     vec3 counts = vec3(0.0);
     for (int dy = -1; dy <= 1; ++dy) {

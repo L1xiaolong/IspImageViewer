@@ -48,6 +48,7 @@ QVariantMap toMap(const RawImageParameters& parameters) {
     values.insert(QStringLiteral("orientation"), static_cast<int>(parameters.orientation));
     values.insert(QStringLiteral("blackLevel"), parameters.blackLevel);
     values.insert(QStringLiteral("whiteLevel"), parameters.whiteLevel);
+    values.insert(QStringLiteral("demosaic"), parameters.demosaic);
     values.insert(QStringLiteral("wbRed"), parameters.whiteBalanceGains[0]);
     values.insert(QStringLiteral("wbGreen"), parameters.whiteBalanceGains[1]);
     values.insert(QStringLiteral("wbBlue"), parameters.whiteBalanceGains[2]);
@@ -107,6 +108,7 @@ std::optional<RawImageParameters> fromMap(const QVariantMap& values) {
         static_cast<ImageOrientation>(values.value(QStringLiteral("orientation"), 0).toInt());
     result.blackLevel = values.value(QStringLiteral("blackLevel")).toInt();
     result.whiteLevel = values.value(QStringLiteral("whiteLevel")).toInt();
+    result.demosaic = values.value(QStringLiteral("demosaic"), false).toBool();
     result.whiteBalanceGains = {
         values.value(QStringLiteral("wbRed"), 1.0).toDouble(),
         values.value(QStringLiteral("wbGreen"), 1.0).toDouble(),

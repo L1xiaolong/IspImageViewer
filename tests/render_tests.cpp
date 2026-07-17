@@ -164,6 +164,7 @@ void RenderTests::bayerUniformsDescribePackingAndDisplayTransform() {
     parameters.blackLevel = 64;
     parameters.whiteLevel = 4095;
     parameters.whiteBalanceGains = {2.0, 1.0, 0.5};
+    parameters.demosaic = true;
     parameters.colorCorrectionMatrix = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0};
     parameters.displayGamma = 2.0;
     parameters.orientation = ImageOrientation::Rotate270Clockwise;
@@ -178,6 +179,7 @@ void RenderTests::bayerUniformsDescribePackingAndDisplayTransform() {
     QCOMPARE(values[9], 4095.0F);
     QCOMPARE(values[10], 2.0F);
     QCOMPARE(values[11], 3.0F);
+    QCOMPARE(values[15], 1.0F);
     QCOMPARE(values[12], 2.0F);
     QCOMPARE(values[14], 0.5F);
     QCOMPARE(values[16], 1.0F);
@@ -685,7 +687,8 @@ void RenderTests::bayerPlanesRenderThroughPlatformRhi() {
                  qPrintable(testCase.name + QStringLiteral(": ") + result.error));
         const QImage* reference = result.frame->qImage();
         QVERIFY(reference != nullptr);
-        const QColor expected = reference->pixelColor(1, 1);
+        const QColor expected =
+            reference->pixelColor(reference->width() / 2, reference->height() / 2);
 
         ImageCanvas canvas;
         canvas.resize(160, 120);

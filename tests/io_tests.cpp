@@ -156,6 +156,7 @@ class IoTests final : public QObject {
     void imageLoaderDiskCacheKeepsSourceDimensions();
     void nv12LimitedRangeProducesReferencePixels();
     void mipiRawPackingReturnsExactSensorValues();
+    void bayerRawDefaultsToMosaicAndDemosaicIsOptIn();
     void decoderRegistryRoutesByFormat();
     void defaultDecoderAndFormatCatalogStayConsistent();
     void cameraRawCapabilityMatchesBuildFeature();
@@ -749,6 +750,40 @@ void IoTests::mipiRawPackingReturnsExactSensorValues() {
              std::optional<quint16>(0xABC));
 }
 
+void IoTests::bayerRawDefaultsToMosaicAndDemosaicIsOptIn() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("raw16.raw"));
+    QByteArray bytes(8, Qt::Uninitialized);
+    qToLittleEndian<quint16>(65535, reinterpret_cast<uchar*>(bytes.data()));
+    qToLittleEndian<quint16>(0, reinterpret_cast<uchar*>(bytes.data() + 2));
+    qToLittleEndian<quint16>(0, reinterpret_cast<uchar*>(bytes.data() + 4));
+    qToLittleEndian<quint16>(0, reinterpret_cast<uchar*>(bytes.data() + 6));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    QCOMPARE(file.write(bytes), bytes.size());
+    file.close();
+
+    RawImageParameters parameters;
+    parameters.size = {2, 2};
+    parameters.format = RawPixelFormat::Raw16;
+    parameters.displayGamma = 1.0;
+    RawImageDecoder decoder;
+
+    const DecodeResult mosaic = decoder.decode({path, DecodePurpose::Preview, {}, parameters});
+    QVERIFY2(mosaic.succeeded(), qPrintable(mosaic.error));
+    QCOMPARE(mosaic.frame->rawParameters->demosaic, false);
+    QCOMPARE(mosaic.frame->qImage()->pixelColor(0, 0), QColor(255, 255, 255, 255));
+    QCOMPARE(mosaic.frame->qImage()->pixelColor(1, 0), QColor(0, 0, 0, 255));
+
+    parameters.demosaic = true;
+    const DecodeResult demosaiced = decoder.decode({path, DecodePurpose::Preview, {}, parameters});
+    QVERIFY2(demosaiced.succeeded(), qPrintable(demosaiced.error));
+    const QColor color = demosaiced.frame->qImage()->pixelColor(0, 0);
+    QVERIFY(color.red() > color.green());
+    QVERIFY(color.red() > color.blue());
+}
+
 void IoTests::decoderRegistryRoutesByFormat() {
     ImageDecoderRegistry registry;
     registry.add(std::make_shared<QtImageDecoder>());
@@ -1239,6 +1274,7 @@ void IoTests::bayerDisplayTransformAppliesWhiteBalanceCcmAndGamma() {
     parameters.size = {4, 4};
     parameters.format = RawPixelFormat::Raw16;
     parameters.bayerPattern = BayerPattern::RGGB;
+    parameters.demosaic = true;
     parameters.whiteBalanceGains = {2.0, 1.0, 0.5};
     parameters.colorCorrectionMatrix = {0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0};
     parameters.displayGamma = 1.0;

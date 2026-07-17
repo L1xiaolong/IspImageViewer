@@ -200,7 +200,7 @@ void ThumbnailModel::invalidateThumbnail(const QString& path) {
     const int row = pathToRow_.value(path, -1);
     if (row >= 0) {
         const QModelIndex changed = index(row);
-        emit dataChanged(changed, changed, {Qt::DecorationRole});
+        emit dataChanged(changed, changed, {Qt::DecorationRole, DimensionsRole});
     }
 }
 

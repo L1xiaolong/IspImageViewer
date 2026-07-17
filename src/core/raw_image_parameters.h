@@ -32,6 +32,7 @@ struct RawImageParameters {
     ImageOrientation orientation = ImageOrientation::Normal;
     int blackLevel = 0;
     int whiteLevel = 0;
+    bool demosaic = false;
     std::array<double, 3> whiteBalanceGains{1.0, 1.0, 1.0};
     std::array<double, 9> colorCorrectionMatrix{1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
     double displayGamma = 2.2;

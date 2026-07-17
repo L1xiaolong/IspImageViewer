@@ -25,6 +25,7 @@ class RawParameterPanel final : public QWidget {
     explicit RawParameterPanel(QWidget* parent = nullptr);
 
     void setSource(const QString& path, const RawImageParameters& parameters);
+    void clearSource();
     [[nodiscard]] QString sourcePath() const { return path_; }
     [[nodiscard]] RawImageParameters parameters() const;
     void refreshPresets();
@@ -57,6 +58,7 @@ class RawParameterPanel final : public QWidget {
     QComboBox* orientation_;
     QCheckBox* littleEndian_;
     QCheckBox* msbAligned_;
+    QCheckBox* demosaic_;
     QSpinBox* blackLevel_;
     QSpinBox* whiteLevel_;
     std::array<QDoubleSpinBox*, 3> whiteBalance_{};

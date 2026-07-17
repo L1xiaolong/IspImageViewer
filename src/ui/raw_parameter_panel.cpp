@@ -75,9 +75,9 @@ RawParameterPanel::RawParameterPanel(QWidget* parent)
       matrix_(new QComboBox(this)), range_(new QComboBox(this)), orientation_(new QComboBox(this)),
       littleEndian_(new QCheckBox(QStringLiteral("Little endian"), this)),
       msbAligned_(new QCheckBox(QStringLiteral("Valid bits are MSB aligned"), this)),
-      blackLevel_(parameterSpin(this)), whiteLevel_(parameterSpin(this)),
-      gamma_(parameterDouble(this, 0.1, 10.0, 4)), form_(new QFormLayout),
-      whiteBalanceWidget_(new QWidget(this)),
+      demosaic_(new QCheckBox(QStringLiteral("Demosaic"), this)), blackLevel_(parameterSpin(this)),
+      whiteLevel_(parameterSpin(this)), gamma_(parameterDouble(this, 0.1, 10.0, 4)),
+      form_(new QFormLayout), whiteBalanceWidget_(new QWidget(this)),
       colorMatrixGroup_(new QGroupBox(QStringLiteral("Color correction matrix"), this)),
       editorActions_(new QWidget(this)),
       deleteConfiguration_(
@@ -98,6 +98,7 @@ RawParameterPanel::RawParameterPanel(QWidget* parent)
     orientation_->setObjectName(QStringLiteral("rawPanelOrientation"));
     littleEndian_->setObjectName(QStringLiteral("rawPanelLittleEndian"));
     msbAligned_->setObjectName(QStringLiteral("rawPanelMsbAligned"));
+    demosaic_->setObjectName(QStringLiteral("rawPanelDemosaic"));
     validBits_->setRange(0, 16);
     blackLevel_->setObjectName(QStringLiteral("rawPanelBlackLevel"));
     whiteLevel_->setObjectName(QStringLiteral("rawPanelWhiteLevel"));
@@ -167,6 +168,7 @@ RawParameterPanel::RawParameterPanel(QWidget* parent)
     form_->addRow(QStringLiteral("Orientation"), orientation_);
     form_->addRow(littleEndian_);
     form_->addRow(msbAligned_);
+    form_->addRow(demosaic_);
     form_->addRow(QStringLiteral("Black level"), blackLevel_);
     form_->addRow(QStringLiteral("White level (0 = maximum)"), whiteLevel_);
     form_->addRow(QStringLiteral("White balance"), whiteBalanceWidget_);
@@ -238,6 +240,7 @@ RawParameterPanel::RawParameterPanel(QWidget* parent)
             &RawParameterPanel::updateFormatControls);
     connect(littleEndian_, &QCheckBox::toggled, this, &RawParameterPanel::scheduleChange);
     connect(msbAligned_, &QCheckBox::toggled, this, &RawParameterPanel::scheduleChange);
+    connect(demosaic_, &QCheckBox::toggled, this, &RawParameterPanel::scheduleChange);
     connect(orientation_, &QComboBox::currentIndexChanged, this,
             &RawParameterPanel::scheduleChange);
     for (QSpinBox* spin : {blackLevel_, whiteLevel_}) {
@@ -255,11 +258,16 @@ RawParameterPanel::RawParameterPanel(QWidget* parent)
         if (updating_ || index <= 0 || path_.isEmpty()) {
             return;
         }
-        const auto selected = RawPresetStore::loadNamedPreset(preset_->currentText());
+        const QString presetName = preset_->currentText();
+        const auto selected = RawPresetStore::loadNamedPreset(presetName);
         if (!selected) {
             return;
         }
         setSource(path_, *selected);
+        const QSignalBlocker blocker(preset_);
+        const int restored = preset_->findText(presetName);
+        preset_->setCurrentIndex(restored > 0 ? restored : 0);
+        deleteConfiguration_->setEnabled(preset_->currentIndex() > 0);
         emit parametersChanged(path_, parameters());
     });
     refreshPresets();
@@ -267,7 +275,13 @@ RawParameterPanel::RawParameterPanel(QWidget* parent)
 }
 
 void RawParameterPanel::setSource(const QString& path, const RawImageParameters& value) {
+    setEnabled(true);
     refreshPresets();
+    {
+        const QSignalBlocker blocker(preset_);
+        preset_->setCurrentIndex(0);
+        deleteConfiguration_->setEnabled(false);
+    }
     updating_ = true;
     path_ = path;
     baseParameters_ = value;
@@ -284,6 +298,7 @@ void RawParameterPanel::setSource(const QString& path, const RawImageParameters&
     orientation_->setCurrentIndex(orientation_->findData(static_cast<int>(value.orientation)));
     littleEndian_->setChecked(value.littleEndian);
     msbAligned_->setChecked(value.msbAligned);
+    demosaic_->setChecked(value.demosaic);
     blackLevel_->setValue(value.blackLevel);
     whiteLevel_->setValue(value.whiteLevel);
     for (int index = 0; index < static_cast<int>(whiteBalance_.size()); ++index) {
@@ -297,6 +312,12 @@ void RawParameterPanel::setSource(const QString& path, const RawImageParameters&
     gamma_->setValue(value.displayGamma);
     updating_ = false;
     updateFormatControls();
+}
+
+void RawParameterPanel::clearSource() {
+    changeTimer_->stop();
+    setSource(QString{}, RawImageParameters{});
+    setEnabled(false);
 }
 
 void RawParameterPanel::refreshPresets() {
@@ -325,6 +346,7 @@ RawImageParameters RawParameterPanel::parameters() const {
     value.orientation = static_cast<ImageOrientation>(orientation_->currentData().toInt());
     value.littleEndian = littleEndian_->isChecked();
     value.msbAligned = msbAligned_->isChecked();
+    value.demosaic = value.isYuv() ? false : demosaic_->isChecked();
     value.blackLevel = blackLevel_->value();
     value.whiteLevel = whiteLevel_->value();
     for (int index = 0; index < static_cast<int>(whiteBalance_.size()); ++index) {
@@ -353,15 +375,16 @@ void RawParameterPanel::updateFormatControls() {
     form_->setRowVisible(matrix_, yuv);
     form_->setRowVisible(range_, yuv);
     form_->setRowVisible(bayerPattern_, !yuv);
+    form_->setRowVisible(demosaic_, !yuv);
     form_->setRowVisible(blackLevel_, !yuv);
     form_->setRowVisible(whiteLevel_, !yuv);
     form_->setRowVisible(whiteBalanceWidget_, !yuv);
     form_->setRowVisible(gamma_, !yuv);
     colorMatrixGroup_->setVisible(!yuv);
-    const std::array<QWidget*, 16> controls{format_,       width_,      height_,      rowStride_,
-                                            chromaStride_, offset_,     validBits_,   bayerPattern_,
-                                            matrix_,       range_,      orientation_, littleEndian_,
-                                            msbAligned_,   blackLevel_, whiteLevel_,  gamma_};
+    const std::array<QWidget*, 17> controls{
+        format_,     width_,        height_,     rowStride_,  chromaStride_, offset_,
+        validBits_,  bayerPattern_, matrix_,     range_,      orientation_,  littleEndian_,
+        msbAligned_, demosaic_,     blackLevel_, whiteLevel_, gamma_};
     for (QWidget* control : controls) {
         control->setEnabled(true);
     }
