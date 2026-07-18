@@ -31,12 +31,16 @@ QString uniqueDestination(const QFileInfo& source, const QDir& target) {
 }
 
 bool isInside(const QString& candidate, const QString& directory) {
-    const QString child = QDir::cleanPath(QFileInfo(candidate).absoluteFilePath());
-    QString parent = QDir::cleanPath(QFileInfo(directory).absoluteFilePath());
-    if (!parent.endsWith(QDir::separator())) {
-        parent += QDir::separator();
+    const auto normalized = [](const QString& path) {
+        return QDir::fromNativeSeparators(QDir::cleanPath(QFileInfo(path).absoluteFilePath()))
+            .toCaseFolded();
+    };
+    const QString child = normalized(candidate);
+    const QString parent = normalized(directory);
+    if (child.compare(parent, Qt::CaseInsensitive) == 0) {
+        return true;
     }
-    return child.startsWith(parent, Qt::CaseInsensitive);
+    return child.startsWith(parent + QLatin1Char('/'));
 }
 
 bool copyEntry(const QFileInfo& source, const QString& destination, QStringList* errors) {
@@ -54,6 +58,15 @@ bool copyEntry(const QFileInfo& source, const QString& destination, QStringList*
     }
     if (!source.isDir()) {
         errors->append(QStringLiteral("Unsupported filesystem item: %1").arg(source.fileName()));
+        return false;
+    }
+
+    // Check every recursive step as well as the public entry point. On Windows, a directory
+    // destination can be represented with a different separator/casing after Qt resolves it;
+    // without this guard a recursive copy may start walking the destination it is creating.
+    if (isInside(destination, source.absoluteFilePath())) {
+        errors->append(QStringLiteral("Cannot copy or move a folder inside itself: %1")
+                           .arg(source.fileName()));
         return false;
     }
 

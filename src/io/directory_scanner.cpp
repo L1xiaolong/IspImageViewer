@@ -14,6 +14,21 @@
 #include <utility>
 
 namespace ispview {
+namespace {
+
+QString normalizedAbsolutePath(const QString& path) {
+    return QDir::fromNativeSeparators(QDir::cleanPath(QFileInfo(path).absoluteFilePath()))
+        .toCaseFolded();
+}
+
+bool isDescendantPath(const QDir& root, const QString& candidate) {
+    const QString relative = QDir::fromNativeSeparators(root.relativeFilePath(candidate));
+    return relative != QStringLiteral(".") && relative != QStringLiteral("..") &&
+           !relative.startsWith(QStringLiteral("../")) && !QDir::isAbsolutePath(relative);
+}
+
+} // namespace
+
 DirectoryScanner::DirectoryScanner(QObject* parent) : QObject(parent) {}
 
 quint64 DirectoryScanner::scanAsync(const QString& directory) {
@@ -94,6 +109,7 @@ QVector<ImageFileRecord> DirectoryScanner::scan(const QString& directory) {
 QVector<ImageFileRecord> DirectoryScanner::scanImageFoldersRecursively(const QString& directory) {
     const QDir root(directory);
     const QString rootPath = QDir::cleanPath(root.absolutePath());
+    const QString normalizedRootPath = normalizedAbsolutePath(rootPath);
     if (!QFileInfo(rootPath).isDir()) {
         return {};
     }
@@ -123,10 +139,11 @@ QVector<ImageFileRecord> DirectoryScanner::scanImageFoldersRecursively(const QSt
 
         // Mark both the direct image folder and every ancestor below the selected root. This makes
         // every branch that can lead to an image visible while excluding empty/document-only trees.
-        while (folder != rootPath && folder.startsWith(rootPath + QDir::separator())) {
+        while (normalizedAbsolutePath(folder) != normalizedRootPath &&
+               isDescendantPath(root, folder)) {
             imageFolders.insert(folder);
             const QString parent = QDir::cleanPath(QFileInfo(folder).absolutePath());
-            if (parent == folder) {
+            if (normalizedAbsolutePath(parent) == normalizedAbsolutePath(folder)) {
                 break;
             }
             folder = parent;

@@ -61,11 +61,13 @@ void ImageLoader::request(quint64 requestId, DecodeRequest request, Callback cal
                         QImageReader sourceReader(request.path);
                         frame->metadata.sourceSize = sourceReader.size();
                     }
-                    if (!frame->metadata.sourceSize.isValid()) {
-                        frame->metadata.sourceSize = cachedImage.size();
+                    if (frame->metadata.sourceSize.isValid()) {
+                        frame->storage = std::move(cachedImage);
+                        result.frame = std::move(frame);
                     }
-                    frame->storage = std::move(cachedImage);
-                    result.frame = std::move(frame);
+                    // Formats such as DNG are not understood by QImageReader. When the source
+                    // size is unavailable, leave the cache result empty so the decoder rebuilds
+                    // the frame with its source metadata and RAW parameters.
                 }
             }
             if (!result.frame) {

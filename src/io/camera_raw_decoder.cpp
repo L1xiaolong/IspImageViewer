@@ -6,6 +6,7 @@
 #include <QImage>
 #include <QImageReader>
 
+#include <algorithm>
 #include <cmath>
 #include <exception>
 #include <limits>
@@ -134,10 +135,104 @@ ImageMetadata metadataFor(const QString& path, const LibRaw& processor) {
     }
     camera.sensorSize = {processor.imgdata.sizes.raw_width, processor.imgdata.sizes.raw_height};
     metadata.camera = std::move(camera);
+    const int imageWidth = processor.imgdata.sizes.iwidth > 0 ? processor.imgdata.sizes.iwidth
+                                                               : processor.imgdata.sizes.width;
+    const int imageHeight = processor.imgdata.sizes.iheight > 0
+                                ? processor.imgdata.sizes.iheight
+                                : processor.imgdata.sizes.height;
+    metadata.sourceSize = {imageWidth, imageHeight};
     return metadata;
 }
 
-DecodeResult frameFromImage(QImage image, ImageMetadata metadata, const QSize& maximumSize) {
+std::optional<RawImageParameters> rawParametersFor(LibRaw& processor) {
+    const auto& sizes = processor.imgdata.sizes;
+    const int width = sizes.iwidth > 0 ? sizes.iwidth : sizes.width;
+    const int height = sizes.iheight > 0 ? sizes.iheight : sizes.height;
+    if (width <= 0 || height <= 0 || processor.imgdata.idata.filters == 0) {
+        return std::nullopt;
+    }
+
+    const int cfa[4] = {processor.COLOR(0, 0), processor.COLOR(0, 1),
+                        processor.COLOR(1, 0), processor.COLOR(1, 1)};
+    BayerPattern pattern;
+    if (cfa[0] == 0 && cfa[1] == 1 && cfa[2] == 3 && cfa[3] == 2) {
+        pattern = BayerPattern::RGGB;
+    } else if (cfa[0] == 1 && cfa[1] == 0 && cfa[2] == 2 && cfa[3] == 3) {
+        pattern = BayerPattern::GRBG;
+    } else if (cfa[0] == 3 && cfa[1] == 2 && cfa[2] == 0 && cfa[3] == 1) {
+        pattern = BayerPattern::GBRG;
+    } else if (cfa[0] == 2 && cfa[1] == 3 && cfa[2] == 1 && cfa[3] == 0) {
+        pattern = BayerPattern::BGGR;
+    } else {
+        return std::nullopt;
+    }
+
+    RawImageParameters parameters;
+    parameters.size = {width, height};
+    parameters.format = RawPixelFormat::Raw16;
+    parameters.rowStride = sizes.raw_pitch > 0
+                               ? sizes.raw_pitch
+                               : static_cast<qsizetype>(width) * sizeof(quint16);
+    parameters.bayerPattern = pattern;
+    parameters.demosaic = true;
+    parameters.orientation = ImageOrientation::Normal;
+    switch (sizes.flip) {
+    case 3:
+        parameters.orientation = ImageOrientation::Rotate180;
+        break;
+    case 5:
+        parameters.orientation = ImageOrientation::Rotate90Clockwise;
+        break;
+    case 6:
+        parameters.orientation = ImageOrientation::Rotate270Clockwise;
+        break;
+    default:
+        break;
+    }
+
+    const unsigned maximum = processor.imgdata.color.maximum;
+    if (maximum > 0 && maximum <= 65535) {
+        parameters.whiteLevel = static_cast<int>(maximum);
+        int validBits = 0;
+        while (validBits < 16 && ((1u << validBits) - 1u) < maximum) {
+            ++validBits;
+        }
+        parameters.validBitsOverride = validBits;
+    }
+    parameters.blackLevel = static_cast<int>(std::min<unsigned>(processor.imgdata.color.black,
+                                                                 65534u));
+    if (parameters.whiteLevel > parameters.blackLevel) {
+        parameters.whiteLevel = std::max(parameters.whiteLevel, parameters.blackLevel + 1);
+    }
+
+    bool validWhiteBalance = true;
+    for (int channel = 0; channel < 3; ++channel) {
+        const float gain = processor.imgdata.color.cam_mul[channel];
+        validWhiteBalance = validWhiteBalance && std::isfinite(gain) && gain > 0.0F;
+        parameters.whiteBalanceGains[static_cast<std::size_t>(channel)] = gain;
+    }
+    if (!validWhiteBalance) {
+        parameters.whiteBalanceGains = {1.0, 1.0, 1.0};
+    }
+
+    bool validMatrix = true;
+    for (int row = 0; row < 3; ++row) {
+        for (int column = 0; column < 3; ++column) {
+            const float value = processor.imgdata.color.rgb_cam[row][column];
+            validMatrix = validMatrix && std::isfinite(value);
+            parameters.colorCorrectionMatrix[static_cast<std::size_t>(row * 3 + column)] = value;
+        }
+    }
+    if (!validMatrix) {
+        parameters.colorCorrectionMatrix = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0,
+                                            0.0, 0.0, 1.0};
+    }
+    return parameters;
+}
+
+DecodeResult frameFromImage(QImage image, ImageMetadata metadata,
+                            std::optional<RawImageParameters> rawParameters,
+                            const QSize& maximumSize) {
     if (image.isNull()) {
         return {{}, QStringLiteral("LibRaw produced an empty image")};
     }
@@ -157,6 +252,7 @@ DecodeResult frameFromImage(QImage image, ImageMetadata metadata, const QSize& m
     frame->descriptor.storageBits = 8;
     frame->descriptor.validBits = 8;
     frame->metadata = std::move(metadata);
+    frame->rawParameters = std::move(rawParameters);
     frame->storage = std::move(image);
     return {std::move(frame), {}};
 }
@@ -171,6 +267,7 @@ DecodeResult decodeWithLibRaw(const DecodeRequest& request) {
                         .arg(QFileInfo(request.path).fileName(), libRawError(code))};
     }
     ImageMetadata metadata = metadataFor(request.path, *processor);
+    std::optional<RawImageParameters> rawParameters = rawParametersFor(*processor);
 
     if (request.purpose != DecodePurpose::Full) {
         code = processor->unpack_thumb();
@@ -182,6 +279,7 @@ DecodeResult decodeWithLibRaw(const DecodeRequest& request) {
                 QImage image = processedImageToQImage(*processed, &conversionError);
                 if (!image.isNull()) {
                     return frameFromImage(std::move(image), std::move(metadata),
+                                          std::move(rawParameters),
                                           request.maximumSize);
                 }
             }
@@ -196,6 +294,7 @@ DecodeResult decodeWithLibRaw(const DecodeRequest& request) {
                             .arg(libRawError(code))};
         }
         metadata = metadataFor(request.path, *processor);
+        rawParameters = rawParametersFor(*processor);
         processor->imgdata.params.half_size = 1;
     }
 
@@ -222,7 +321,8 @@ DecodeResult decodeWithLibRaw(const DecodeRequest& request) {
     if (image.isNull()) {
         return {{}, conversionError};
     }
-    return frameFromImage(std::move(image), std::move(metadata), request.maximumSize);
+    return frameFromImage(std::move(image), std::move(metadata), std::move(rawParameters),
+                          request.maximumSize);
 }
 
 #endif
@@ -243,7 +343,7 @@ QStringList CameraRawDecoder::supportedSuffixes() {
 
 QString CameraRawDecoder::cacheIdentity() const {
 #if ISPVIEW_HAS_LIBRAW
-    return QStringLiteral("camera-raw-v1|libraw-%1")
+    return QStringLiteral("camera-raw-v2|libraw-%1")
         .arg(QString::fromLatin1(libraw_version()));
 #else
     return QStringLiteral("camera-raw-disabled");

@@ -57,13 +57,48 @@
         "BUILD_TESTING": "OFF",
         "ISPVIEW_BUILD_BENCHMARKS": "ON"
       }
+    },
+    {
+      "name": "windows-msys2-debug",
+      "displayName": "Windows x64 MSYS2/UCRT64 Debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/windows-msys2-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_PREFIX_PATH": "$env{MSYS2_UCRT64}",
+        "BUILD_TESTING": "ON"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "windows-msys2-release",
+      "displayName": "Windows x64 MSYS2/UCRT64 Release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/windows-msys2-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_PREFIX_PATH": "$env{MSYS2_UCRT64}",
+        "BUILD_TESTING": "OFF",
+        "ISPVIEW_BUILD_BENCHMARKS": "ON"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
     }
   ],
   "buildPresets": [
     { "name": "macos-debug", "configurePreset": "macos-debug" },
     { "name": "macos-release", "configurePreset": "macos-release" },
     { "name": "windows-debug", "configurePreset": "windows-debug", "configuration": "Debug" },
-    { "name": "windows-release", "configurePreset": "windows-release", "configuration": "Release" }
+    { "name": "windows-release", "configurePreset": "windows-release", "configuration": "Release" },
+    { "name": "windows-msys2-debug", "configurePreset": "windows-msys2-debug" },
+    { "name": "windows-msys2-release", "configurePreset": "windows-msys2-release" }
   ],
   "testPresets": [
     {
@@ -90,6 +125,18 @@
       "displayName": "Windows native Direct3D 11 acceptance",
       "configurePreset": "windows-debug",
       "configuration": "Debug",
+      "filter": { "include": { "name": "^ispview_render_tests$" } },
+      "environment": { "ISPVIEW_REQUIRE_NATIVE_RHI_TESTS": "1" },
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "windows-msys2-debug",
+      "configurePreset": "windows-msys2-debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "windows-msys2-rhi-acceptance",
+      "configurePreset": "windows-msys2-debug",
       "filter": { "include": { "name": "^ispview_render_tests$" } },
       "environment": { "ISPVIEW_REQUIRE_NATIVE_RHI_TESTS": "1" },
       "output": { "outputOnFailure": true }

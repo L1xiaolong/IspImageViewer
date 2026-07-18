@@ -97,8 +97,17 @@ void main() {
         for (int dx = -1; dx <= 1; ++dx) {
             ivec2 samplePixel = clamp(center + ivec2(dx, dy), ivec2(0), imageSize - ivec2(1));
             int channel = cfaChannel(samplePixel);
-            sums[channel] += normalizedRaw(samplePixel);
-            counts[channel] += 1.0;
+            float sampleValue = normalizedRaw(samplePixel);
+            if (channel == 0) {
+                sums.x += sampleValue;
+                counts.x += 1.0;
+            } else if (channel == 1) {
+                sums.y += sampleValue;
+                counts.y += 1.0;
+            } else {
+                sums.z += sampleValue;
+                counts.z += 1.0;
+            }
         }
     }
     vec3 balanced = (sums / counts) * whiteBalance.rgb;

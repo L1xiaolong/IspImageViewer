@@ -54,7 +54,13 @@ if(WIN32 AND EXISTS "${_ispview_windows_icon}")
     set(_ispview_windows_icon_rc "${CMAKE_CURRENT_BINARY_DIR}/ISPImageViewerIcon.rc")
     file(GENERATE OUTPUT "${_ispview_windows_icon_rc}"
         CONTENT "IDI_ICON1 ICON \"${_ispview_windows_icon}\"\n")
-    target_sources(ISPImageViewer PRIVATE "${_ispview_windows_icon_rc}")
+    # Keep the resource compiler target free of Qt include directories. MinGW windres invokes
+    # its preprocessor through cmd.exe and can split paths containing spaces even when CMake
+    # quotes them (for example D:/Program Files/msys64).
+    add_library(ISPImageViewer_windows_icon OBJECT "${_ispview_windows_icon_rc}")
+    target_sources(ISPImageViewer PRIVATE
+        $<TARGET_OBJECTS:ISPImageViewer_windows_icon>
+    )
 endif()
 
 unset(_ispview_bundle_name)

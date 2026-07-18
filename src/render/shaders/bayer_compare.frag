@@ -148,8 +148,17 @@ vec3 primaryDisplayRgb(vec2 displayUv) {
         for (int dx = -1; dx <= 1; ++dx) {
             ivec2 pixel = clamp(center + ivec2(dx, dy), ivec2(0), size - ivec2(1));
             int channel = cfaChannel(pixel, int(round(primaryLayoutFlags.x)));
-            sums[channel] += primaryDisplayValue(pixel);
-            counts[channel] += 1.0;
+            float sampleValue = primaryDisplayValue(pixel);
+            if (channel == 0) {
+                sums.x += sampleValue;
+                counts.x += 1.0;
+            } else if (channel == 1) {
+                sums.y += sampleValue;
+                counts.y += 1.0;
+            } else {
+                sums.z += sampleValue;
+                counts.z += 1.0;
+            }
         }
     }
     vec3 balanced = (sums / counts) * primaryWhiteBalance.rgb;
@@ -170,8 +179,17 @@ vec3 candidateDisplayRgb(vec2 displayUv) {
         for (int dx = -1; dx <= 1; ++dx) {
             ivec2 pixel = clamp(center + ivec2(dx, dy), ivec2(0), size - ivec2(1));
             int channel = cfaChannel(pixel, int(round(candidateLayoutFlags.x)));
-            sums[channel] += candidateDisplayValue(pixel);
-            counts[channel] += 1.0;
+            float sampleValue = candidateDisplayValue(pixel);
+            if (channel == 0) {
+                sums.x += sampleValue;
+                counts.x += 1.0;
+            } else if (channel == 1) {
+                sums.y += sampleValue;
+                counts.y += 1.0;
+            } else {
+                sums.z += sampleValue;
+                counts.z += 1.0;
+            }
         }
     }
     vec3 balanced = (sums / counts) * candidateWhiteBalance.rgb;

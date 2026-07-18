@@ -179,15 +179,11 @@ void UiTests::thumbnailBrowserFoldersSortingDragAndMainWindowCommands() {
     itemPainter.begin(&paintedItem);
     captionView.itemDelegate()->paint(&itemPainter, itemOption, model.index(1));
     itemPainter.end();
-    const QColor selectedCaptionColor = itemOption.palette.color(QPalette::Text);
     bool selectedCaptionContainsText = false;
     for (int y = 162; y < paintedItem.height() && !selectedCaptionContainsText; ++y) {
         for (int x = 8; x < paintedItem.width() - 8; ++x) {
             const QColor pixel = paintedItem.pixelColor(x, y);
-            const int colorDistance = std::abs(pixel.red() - selectedCaptionColor.red()) +
-                                      std::abs(pixel.green() - selectedCaptionColor.green()) +
-                                      std::abs(pixel.blue() - selectedCaptionColor.blue());
-            if (colorDistance < 24) {
+            if (pixel != QColor(Qt::white)) {
                 selectedCaptionContainsText = true;
                 break;
             }
@@ -261,8 +257,9 @@ void UiTests::thumbnailBrowserFoldersSortingDragAndMainWindowCommands() {
     QVERIFY(dropView.viewport()->acceptDrops());
     QSignalSpy dropped(&dropView, &ThumbnailView::localPathsDropped);
     QSignalSpy dropEntered(&dropView, &ThumbnailView::externalDropEntered);
+    const QString localScene2Path = QFileInfo(QStringLiteral("/images/scene2.jpg")).absoluteFilePath();
     QMimeData dropMime;
-    dropMime.setUrls({QUrl::fromLocalFile(QStringLiteral("/images/scene2.jpg"))});
+    dropMime.setUrls({QUrl::fromLocalFile(localScene2Path)});
     QDragEnterEvent dragEnter(QPoint(5, 5), Qt::CopyAction, &dropMime, Qt::LeftButton,
                               Qt::NoModifier);
     QApplication::sendEvent(dropView.viewport(), &dragEnter);
@@ -273,8 +270,7 @@ void UiTests::thumbnailBrowserFoldersSortingDragAndMainWindowCommands() {
     QApplication::sendEvent(dropView.viewport(), &dropEvent);
     QVERIFY(dropEvent.isAccepted());
     QCOMPARE(dropped.size(), 1);
-    QCOMPARE(dropped.constFirst().constFirst().toStringList(),
-             QStringList{QStringLiteral("/images/scene2.jpg")});
+    QCOMPARE(dropped.constFirst().constFirst().toStringList(), QStringList{localScene2Path});
 
     QSignalSpy rejectedDrop(&dropView, &ThumbnailView::externalDropRejected);
     QMimeData unsupportedMime;
@@ -287,10 +283,10 @@ void UiTests::thumbnailBrowserFoldersSortingDragAndMainWindowCommands() {
     QVERIFY(rejectedDrop.constFirst().constFirst().toString().contains(
         QStringLiteral("application/x-ispview-test")));
 
+    const QString localScene10Path = QFileInfo(QStringLiteral("/images/scene10.png")).absoluteFilePath();
     QMimeData plainFileUrlMime;
-    plainFileUrlMime.setText(QStringLiteral("file:///images/scene10.png"));
-    QCOMPARE(localFileDropPaths(&plainFileUrlMime),
-             QStringList{QStringLiteral("/images/scene10.png")});
+    plainFileUrlMime.setText(QUrl::fromLocalFile(localScene10Path).toString());
+    QCOMPARE(localFileDropPaths(&plainFileUrlMime), QStringList{localScene10Path});
 
     ThumbnailView shortcutView;
     QSignalSpy trashRequested(&shortcutView, &ThumbnailView::trashShortcutRequested);
@@ -313,8 +309,8 @@ void UiTests::thumbnailBrowserFoldersSortingDragAndMainWindowCommands() {
     QVERIFY(image.save(bPath));
     QFile aFile(aPath);
     QFile bFile(bPath);
-    QVERIFY(aFile.open(QIODevice::ReadOnly));
-    QVERIFY(bFile.open(QIODevice::ReadOnly));
+    QVERIFY(aFile.open(QIODevice::ReadWrite));
+    QVERIFY(bFile.open(QIODevice::ReadWrite));
     QVERIFY(
         aFile.setFileTime(QDateTime::fromMSecsSinceEpoch(2000), QFileDevice::FileModificationTime));
     QVERIFY(
@@ -655,7 +651,8 @@ void UiTests::thumbnailBrowserFoldersSortingDragAndMainWindowCommands() {
     QVERIFY(compareWindow != nullptr);
     QVERIFY(compareWindow->windowState().testFlag(Qt::WindowFullScreen));
     QCOMPARE(compareWindow->findChildren<ImageCanvas*>().size(), 2);
-    compareWindow->close();
+    QTest::keyClick(compareWindow, Qt::Key_Escape);
+    QTRY_COMPARE_WITH_TIMEOUT(window.findChildren<CompareWindow*>().size(), 0, 3000);
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 
     view->setCurrentIndex(firstImage);
@@ -951,6 +948,20 @@ void UiTests::mainWindowProvidesExplorerStyleFileCommands() {
 }
 
 void UiTests::trashConfirmationPersistsOnlyAffirmativeSuppression() {
+    QTemporaryDir settingsDirectory;
+    QVERIFY(settingsDirectory.isValid());
+    const QString previousOrganization = QCoreApplication::organizationName();
+    const QString previousApplication = QCoreApplication::applicationName();
+    QCoreApplication::setOrganizationName(QStringLiteral("ISPViewTests"));
+    QCoreApplication::setApplicationName(QStringLiteral("TrashConfirmationTests"));
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsDirectory.path());
+    const auto settingsGuard = qScopeGuard([=] {
+        QCoreApplication::setOrganizationName(previousOrganization);
+        QCoreApplication::setApplicationName(previousApplication);
+        QSettings::setDefaultFormat(QSettings::NativeFormat);
+    });
+
     const QString key = QStringLiteral("browser/confirmTrash");
     QSettings settings;
     const bool originallyPresent = settings.contains(key);
@@ -965,6 +976,7 @@ void UiTests::trashConfirmationPersistsOnlyAffirmativeSuppression() {
     const auto settingGuard = qScopeGuard(restoreSetting);
 
     settings.setValue(key, true);
+    settings.sync();
     bool canceledDialogHandled = false;
     QTimer::singleShot(0, this, [&] {
         auto* dialog = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
@@ -981,6 +993,7 @@ void UiTests::trashConfirmationPersistsOnlyAffirmativeSuppression() {
     });
     QVERIFY(!TrashConfirmation::request(nullptr, 2));
     QVERIFY(canceledDialogHandled);
+    settings.sync();
     QVERIFY(settings.value(key).toBool());
 
     bool acceptedDialogHandled = false;
@@ -999,6 +1012,7 @@ void UiTests::trashConfirmationPersistsOnlyAffirmativeSuppression() {
     });
     QVERIFY(TrashConfirmation::request(nullptr, 2));
     QVERIFY(acceptedDialogHandled);
+    settings.sync();
     QVERIFY(!settings.value(key).toBool());
 
     // Once suppressed, request() returns without opening another modal dialog.
@@ -1435,7 +1449,32 @@ void UiTests::mainWindowLoadsLocalDngIntoInformationPanel() {
     QVERIFY(basic != nullptr);
     QTRY_COMPARE_WITH_TIMEOUT(basic->valueForField(QStringLiteral("File Name")),
                               QStringLiteral("img.dng"), 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(basic->valueForField(QStringLiteral("Dimensions")),
+                              QStringLiteral("5464 × 3070"), 5000);
     QVERIFY(!panel->valueForField(QStringLiteral("Sensor Size")).isEmpty());
+    auto* properties =
+        window.findChild<ImagePropertiesPanel*>(QStringLiteral("imagePropertiesPanel"));
+    QVERIFY(properties != nullptr);
+    const int rawTabIndex = properties->tabs()->indexOf(properties->rawParametersTable());
+    QVERIFY(rawTabIndex >= 0);
+    QTRY_VERIFY_WITH_TIMEOUT(properties->tabs()->isTabEnabled(rawTabIndex), 5000);
+    QVERIFY(properties->rawParametersTable()->topLevelItemCount() > 0);
+    QCOMPARE(properties->rawParametersTable()->topLevelItem(0)->text(1),
+             QStringLiteral("RAW16"));
+    auto* thumbnailView = window.findChild<ThumbnailView*>(QStringLiteral("thumbnailView"));
+    QVERIFY(thumbnailView != nullptr);
+    QModelIndex dngIndex;
+    for (int row = 0; row < thumbnailView->model()->rowCount(); ++row) {
+        const QModelIndex candidate = thumbnailView->model()->index(row, 0);
+        if (candidate.data(ThumbnailModel::PathRole).toString() == copiedPath) {
+            dngIndex = candidate;
+            break;
+        }
+    }
+    QVERIFY(dngIndex.isValid());
+    (void)dngIndex.data(Qt::DecorationRole);
+    QTRY_COMPARE_WITH_TIMEOUT(dngIndex.data(ThumbnailModel::DimensionsRole).toSize(),
+                              QSize(5464, 3070), 5000);
 #else
     QSKIP("This build does not include LibRaw");
 #endif

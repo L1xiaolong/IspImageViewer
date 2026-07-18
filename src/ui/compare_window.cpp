@@ -278,6 +278,11 @@ void CompareWindow::changeEvent(QEvent* event) {
 
 void CompareWindow::keyPressEvent(QKeyEvent* event) {
     const Qt::KeyboardModifiers modifiers = event->modifiers() & ~Qt::KeypadModifier;
+    if (event->key() == Qt::Key_Escape) {
+        close();
+        event->accept();
+        return;
+    }
     if (event->key() == Qt::Key_B && modifiers == Qt::NoModifier) {
         if (!event->isAutoRepeat()) {
             setHoldComparison(true);

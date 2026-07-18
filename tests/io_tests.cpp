@@ -838,6 +838,17 @@ void IoTests::cameraRawDecodesLocalDngWhenAvailable() {
         QSKIP("Optional local test_images/img.dng is not available");
     }
     CameraRawDecoder decoder;
+    const DecodeResult thumbnail = decoder.decode({path, DecodePurpose::Thumbnail, QSize(160, 120)});
+    QVERIFY2(thumbnail.succeeded(), qPrintable(thumbnail.error));
+    QVERIFY(thumbnail.frame->descriptor.size.width() <= 160);
+    QVERIFY(thumbnail.frame->descriptor.size.height() <= 120);
+    QCOMPARE(thumbnail.frame->metadata.sourceSize, QSize(5464, 3070));
+    QVERIFY(thumbnail.frame->rawParameters.has_value());
+    QCOMPARE(thumbnail.frame->rawParameters->size, QSize(5464, 3070));
+    QCOMPARE(thumbnail.frame->rawParameters->format, RawPixelFormat::Raw16);
+    QCOMPARE(thumbnail.frame->rawParameters->validBitsOverride, 12);
+    QCOMPARE(thumbnail.frame->rawParameters->bayerPattern, BayerPattern::RGGB);
+
     const DecodeResult preview = decoder.decode({path, DecodePurpose::Preview, QSize(1920, 1200)});
     QVERIFY2(preview.succeeded(), qPrintable(preview.error));
     QVERIFY(preview.frame->descriptor.size.width() <= 1920);
@@ -845,6 +856,8 @@ void IoTests::cameraRawDecodesLocalDngWhenAvailable() {
     QCOMPARE(preview.frame->metadata.format, QStringLiteral("DNG"));
     QCOMPARE(preview.frame->metadata.decoderName, QStringLiteral("LibRaw"));
     QVERIFY(!preview.frame->metadata.decoderVersion.isEmpty());
+    QCOMPARE(preview.frame->metadata.sourceSize, QSize(5464, 3070));
+    QVERIFY(preview.frame->rawParameters.has_value());
     QVERIFY(preview.frame->metadata.camera.has_value());
     QVERIFY(preview.frame->metadata.camera->sensorSize.isValid());
 

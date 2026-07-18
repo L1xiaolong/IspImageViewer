@@ -164,46 +164,38 @@ Local `test_images` data is intentionally ignored by Git.
 
 ## Build on Windows
 
-Use the same Visual Studio 2022 x64 presets as CI:
+The supported local validation path is MSYS2/UCRT64 GCC + Ninja:
 
 ```pwsh
-.\build_windows.ps1 -Mode debug -Test
-.\build_windows.ps1 -Mode release
+$env:MSYS2_UCRT64 = (& qmake -query QT_INSTALL_PREFIX).Trim()
+.\build_windows.ps1 -Toolchain msys2 -Mode debug -Test -Rhi
+.\build_windows.ps1 -Toolchain msys2 -Mode release
 ```
 
-The wrapper configures and builds the matching CMake preset. Use `.\build_windows.ps1 -Help` for
-`-Clean`, `-Rhi`, and `-Jobs N`.
+The wrapper configures and builds a Ninja tree under `build/windows-msys2-debug` or
+`build/windows-msys2-release`. Use `.\build_windows.ps1 -Help` for `-Clean`, `-Rhi`, `-Jobs N`,
+`-Msys2Ucrt64`, and the legacy `-Toolchain msvc` option.
 
 Equivalent raw CMake commands:
 
 ```pwsh
-cmake --preset windows-debug
-cmake --build --preset windows-debug
-ctest --preset windows-debug
+cmake --preset windows-msys2-debug
+cmake --build --preset windows-msys2-debug
+ctest --preset windows-msys2-debug --output-on-failure
+ctest --preset windows-msys2-rhi-acceptance --output-on-failure
 ```
 
-The multi-configuration build writes executables below `build/windows-debug`, with Debug tools
-and tests in their respective `Debug` subdirectories. The Release preset enables benchmark tools:
+The single-configuration Ninja build writes the application to
+`build/windows-msys2-debug/ISPImageViewer.exe`. The Release preset enables benchmark tools.
+
+For MSYS2 package installation, native UI/RHI test policy, optional LibRaw/Exiv2 validation, and
+the latest Windows evidence, see [docs/windows-msys2-validation.md](docs/windows-msys2-validation.md).
+
+The legacy Visual Studio presets remain available when explicitly requested:
 
 ```pwsh
-cmake --preset windows-release
-cmake --build --preset windows-release
+.\build_windows.ps1 -Toolchain msvc -Mode debug -Test
 ```
-
-To turn the platform RHI test into an acceptance gate that must not silently skip when no native
-surface is available, run the platform preset:
-
-```sh
-ctest --preset macos-rhi-acceptance
-# On Windows:
-ctest --preset windows-rhi-acceptance
-```
-
-The Windows CI uses these presets and requires the Direct3D 11 path at three levels: framebuffer
-Golden tests, the 4K Loader/prefetch/GPU pipeline benchmark, and real 4K `MainWindow` frame
-navigation. The benchmark timings are diagnostic only; functional fallback, missing native
-surfaces, or incomplete frame submission fail the steps. A green ordinary CTest run alone is not
-sufficient native-GPU evidence.
 
 ## Architecture
 
