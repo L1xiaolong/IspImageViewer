@@ -79,7 +79,7 @@ jobs:
           results_file="$PWD/ispview-ui-tests.xml"
           rm -f "$results_file"
           QT_QPA_PLATFORM=offscreen ./build/windows-msys2-debug/ispview_ui_tests.exe \
-            -v2 -o "$results_file,xml"
+            -o "$results_file,xml"
           exit_code=$?
           echo "UI test exit code: $exit_code"
           if [[ -f "$results_file" ]]; then
