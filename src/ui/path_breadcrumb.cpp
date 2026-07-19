@@ -64,9 +64,16 @@ void PathBreadcrumb::setPath(const QString& path) {
         normalizedRoot += QLatin1Char('/');
     }
     const QString relative = normalizedPath.mid(normalizedRoot.size());
-    QString accumulated = rootPath;
+    // Build every segment from the normalized absolute prefix. On Windows,
+    // QDir::cleanPath() can normalize a drive root to a drive-relative form
+    // (for example, "D:"), which would make subsequent filePath() calls no
+    // longer match the absolute directory shown by the model.
+    QString accumulated = normalizedRoot;
     for (const QString& component : relative.split(QLatin1Char('/'), Qt::SkipEmptyParts)) {
-        accumulated = QDir(accumulated).filePath(component);
+        if (!accumulated.endsWith(QLatin1Char('/'))) {
+            accumulated += QLatin1Char('/');
+        }
+        accumulated += component;
         addSegment(component, QDir::cleanPath(accumulated), false);
     }
     segmentLayout_->addStretch(1);

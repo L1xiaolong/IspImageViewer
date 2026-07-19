@@ -70,24 +70,7 @@ jobs:
       - name: Test (Windows MSYS2/UCRT64)
         if: runner.os == 'Windows'
         shell: msys2 {0}
-        run: ctest --preset windows-msys2-debug --output-on-failure -VV
-      - name: Diagnose Windows UI test failure
-        if: failure() && runner.os == 'Windows'
-        shell: msys2 {0}
-        run: |
-          set +e
-          results_file="$PWD/ispview-ui-tests.xml"
-          rm -f "$results_file"
-          QT_QPA_PLATFORM=offscreen ./build/windows-msys2-debug/ispview_ui_tests.exe \
-            -o "$results_file,xml"
-          exit_code=$?
-          echo "UI test exit code: $exit_code"
-          if [[ -f "$results_file" ]]; then
-            cat "$results_file"
-          else
-            echo "UI test did not produce an XML result file."
-          fi
-          exit 0
+        run: ctest --preset windows-msys2-debug
       - name: Require native D3D11 RAW/YUV acceptance
         if: runner.os == 'Windows'
         shell: msys2 {0}
