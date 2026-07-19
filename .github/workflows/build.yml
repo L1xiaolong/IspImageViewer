@@ -30,6 +30,7 @@ jobs:
         if: runner.os == 'macOS'
         with:
           version: '6.9.0'
+          modules: 'qtshadertools'
           cache: true
       - name: Set up MSYS2/UCRT64
         if: runner.os == 'Windows'
