@@ -71,6 +71,15 @@ jobs:
         if: runner.os == 'Windows'
         shell: msys2 {0}
         run: ctest --preset windows-msys2-debug --output-on-failure -VV
+      - name: Diagnose Windows UI test failure
+        if: failure() && runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          set +e
+          QT_QPA_PLATFORM=offscreen ./build/windows-msys2-debug/ispview_ui_tests.exe -v2
+          exit_code=$?
+          echo "UI test exit code: $exit_code"
+          exit 0
       - name: Require native D3D11 RAW/YUV acceptance
         if: runner.os == 'Windows'
         shell: msys2 {0}
