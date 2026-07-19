@@ -70,7 +70,7 @@ jobs:
       - name: Test (Windows MSYS2/UCRT64)
         if: runner.os == 'Windows'
         shell: msys2 {0}
-        run: ctest --preset windows-msys2-debug
+        run: ctest --preset windows-msys2-debug --output-on-failure -VV
       - name: Require native D3D11 RAW/YUV acceptance
         if: runner.os == 'Windows'
         shell: msys2 {0}
