@@ -4,6 +4,15 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing v* tag to package and publish
+        required: true
+        type: string
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 permissions:
   contents: write
@@ -28,6 +37,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - uses: jurplel/install-qt-action@v4
         if: runner.os == 'macOS'
@@ -67,7 +78,7 @@ jobs:
           macdeployqt "$app_bundle" -always-overwrite
           mkdir -p dist
           ditto -c -k --sequesterRsrc --keepParent "$app_bundle" \
-            "dist/ISPImageViewer-${GITHUB_REF_NAME}-${ASSET_SUFFIX}.zip"
+            "dist/ISPImageViewer-${RELEASE_TAG}-${ASSET_SUFFIX}.zip"
 
       - name: Configure and build (Windows)
         if: runner.os == 'Windows'
@@ -95,7 +106,7 @@ jobs:
           windeployqt6 --release --compiler-runtime --no-translations --dir "$package_directory" "$executable"
           (
             cd dist
-            zip -r "ISPImageViewer-${GITHUB_REF_NAME}-${ASSET_SUFFIX}.zip" ISPImageViewer
+            zip -r "ISPImageViewer-${RELEASE_TAG}-${ASSET_SUFFIX}.zip" ISPImageViewer
           )
 
       - name: Upload release asset
@@ -120,7 +131,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" release-assets/*.zip \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "ISP Image Viewer $GITHUB_REF_NAME" \
-            --generate-notes
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-assets/*.zip \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+          else
+            gh release create "$RELEASE_TAG" release-assets/*.zip \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "ISP Image Viewer $RELEASE_TAG" \
+              --generate-notes
+          fi
