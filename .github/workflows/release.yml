@@ -1,0 +1,101 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Package (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            os: macos-15
+            asset_suffix: macos-arm64
+          - name: Windows x64
+            os: windows-latest
+            asset_suffix: windows-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.9.0'
+          cache: true
+
+      - name: Configure and build (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cmake --preset macos-release -DISPVIEW_BUILD_BENCHMARKS=OFF
+          cmake --build --preset macos-release --parallel
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        env:
+          ASSET_SUFFIX: ${{ matrix.asset_suffix }}
+        run: |
+          app_bundle='build/macos-preset-release/src/ISPImageViewer.app'
+          test -d "$app_bundle"
+          macdeployqt "$app_bundle" -always-overwrite
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent "$app_bundle" \
+            "dist/ISPImageViewer-${GITHUB_REF_NAME}-${ASSET_SUFFIX}.zip"
+
+      - name: Configure and build (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake --preset windows-release -DISPVIEW_BUILD_BENCHMARKS=OFF
+          cmake --build --preset windows-release --config Release --parallel
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          ASSET_SUFFIX: ${{ matrix.asset_suffix }}
+        run: |
+          $executable = 'build/windows-release/src/Release/ISPImageViewer.exe'
+          if (-not (Test-Path $executable)) { throw "Release executable was not produced: $executable" }
+          $packageDirectory = 'dist/ISPImageViewer'
+          New-Item -ItemType Directory -Force -Path $packageDirectory | Out-Null
+          windeployqt --release --compiler-runtime --no-translations --dir $packageDirectory $executable
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Path $packageDirectory -DestinationPath "dist/ISPImageViewer-$env:GITHUB_REF_NAME-$env:ASSET_SUFFIX.zip"
+
+      - name: Upload release asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: ISPImageViewer-${{ matrix.asset_suffix }}
+          path: dist/*.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create release and upload packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release-assets/*.zip \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "ISP Image Viewer $GITHUB_REF_NAME" \
+            --generate-notes

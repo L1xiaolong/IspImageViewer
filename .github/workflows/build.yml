@@ -1,8 +1,19 @@
-name: build
+name: CI
 
 on:
   push:
+    branches:
+      - '**'
+    tags-ignore:
+      - 'v*'
   pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -12,7 +23,7 @@ jobs:
         include:
           - os: windows-latest
             preset: windows-debug
-            benchmarks: 'ON'
+            benchmarks: 'OFF'
           - os: macos-15
             preset: macos-debug
             benchmarks: 'OFF'
