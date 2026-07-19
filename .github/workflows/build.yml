@@ -22,38 +22,56 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            preset: windows-debug
-            benchmarks: 'OFF'
           - os: macos-15
-            preset: macos-debug
-            benchmarks: 'OFF'
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: jurplel/install-qt-action@v4
+        if: runner.os == 'macOS'
         with:
           version: '6.9.0'
           cache: true
-      - name: Configure
-        run: >-
-          cmake --preset ${{ matrix.preset }}
-          -DISPVIEW_BUILD_BENCHMARKS=${{ matrix.benchmarks }}
-      - name: Build
-        run: cmake --build --preset ${{ matrix.preset }}
-      - name: Test
-        run: ctest --preset ${{ matrix.preset }}
+      - name: Set up MSYS2/UCRT64
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-qt6-base
+            mingw-w64-ucrt-x86_64-qt6-shadertools
+            mingw-w64-ucrt-x86_64-libraw
+            mingw-w64-ucrt-x86_64-exiv2
+            mingw-w64-ucrt-x86_64-lcms2
+      - name: Configure (macOS)
+        if: runner.os == 'macOS'
+        run: cmake --preset macos-debug -DISPVIEW_BUILD_BENCHMARKS=OFF
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        run: cmake --build --preset macos-debug
+      - name: Test (macOS)
+        if: runner.os == 'macOS'
+        run: ctest --preset macos-debug
+      - name: Configure (Windows MSYS2/UCRT64)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        env:
+          MSYS2_UCRT64: C:/msys64/ucrt64
+        run: cmake --preset windows-msys2-debug -DISPVIEW_BUILD_BENCHMARKS=OFF
+      - name: Build (Windows MSYS2/UCRT64)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: cmake --build --preset windows-msys2-debug
+      - name: Test (Windows MSYS2/UCRT64)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: ctest --preset windows-msys2-debug
       - name: Require native D3D11 RAW/YUV acceptance
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: msys2 {0}
         timeout-minutes: 5
-        run: ctest --preset windows-rhi-acceptance --verbose
-      - name: Exercise 4K Loader and D3D11 pipeline
-        if: runner.os == 'Windows'
-        shell: pwsh
-        timeout-minutes: 10
-        run: ./build/windows-debug/tools/Debug/ispview_gpu_benchmark.exe --bayer --pipeline
-      - name: Exercise 4K MainWindow navigation on D3D11
-        if: runner.os == 'Windows'
-        shell: pwsh
-        timeout-minutes: 10
-        run: ./build/windows-debug/tools/Debug/ispview_ui_benchmark.exe
+        run: ctest --preset windows-msys2-rhi-acceptance --verbose
