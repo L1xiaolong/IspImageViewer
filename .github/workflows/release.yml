@@ -103,7 +103,9 @@ jobs:
           test -f "$executable"
           package_directory='dist/ISPImageViewer'
           mkdir -p "$package_directory"
-          windeployqt6 --release --compiler-runtime --no-translations --dir "$package_directory" "$executable"
+          cp "$executable" "$package_directory/ISPImageViewer.exe"
+          windeployqt6 --release --compiler-runtime --no-translations \
+            "$package_directory/ISPImageViewer.exe"
           (
             cd dist
             zip -r "ISPImageViewer-${RELEASE_TAG}-${ASSET_SUFFIX}.zip" ISPImageViewer
