@@ -1,0 +1,50 @@
+import QtQuick
+import QtQuick.Controls
+import "."
+
+Button {
+    id: control
+    property url iconSource
+    property string toolTipText: text
+    property bool compact: text.length === 0
+
+    implicitWidth: compact ? Theme.touchTarget : contentRow.implicitWidth + 20
+    implicitHeight: Theme.touchTarget
+    padding: 0
+    opacity: enabled ? 1 : 0.38
+
+    background: Rectangle {
+        color: control.checked ? "#E7EFF5" : control.down ? "#E2E9ED" : control.hovered ? "#F1F5F7" : "transparent"
+        radius: 6
+        border.width: control.activeFocus ? 1 : 0
+        border.color: Theme.probeBlue
+    }
+
+    contentItem: Item {
+        Row {
+            id: contentRow
+            spacing: control.compact ? 0 : 6
+            anchors.centerIn: parent
+            Image {
+                width: Theme.iconSize
+                height: Theme.iconSize
+                source: control.iconSource
+                sourceSize: Qt.size(Theme.iconSize * 2, Theme.iconSize * 2)
+                fillMode: Image.PreserveAspectFit
+            }
+            Text {
+                visible: !control.compact
+                text: control.text
+                color: Theme.graphiteInk
+                font.family: Theme.uiFont
+                font.pixelSize: 13
+                font.weight: Font.Medium
+                anchors.verticalCenter: parent.verticalCenter
+            }
+        }
+    }
+
+    ToolTip.visible: hovered && toolTipText.length > 0
+    ToolTip.text: toolTipText
+    ToolTip.delay: 500
+}

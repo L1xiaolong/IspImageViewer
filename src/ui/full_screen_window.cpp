@@ -2,18 +2,26 @@
 
 #include "core/raw_plane_access.h"
 #include "io/image_loader.h"
+#include "io/single_file_rename.h"
 #include "platform/platform_services.h"
 #include "render/image_canvas.h"
+#include "ui/file_clipboard.h"
 #include "ui/image_properties_panel.h"
+#include "ui/trash_confirmation.h"
 
 #include <QAction>
+#include <QDir>
 #include <QEvent>
+#include <QFile>
 #include <QFileInfo>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMenu>
+#include <QInputDialog>
+#include <QMessageBox>
 #include <QMouseEvent>
 #include <QPointer>
 #include <QResizeEvent>
@@ -57,33 +65,37 @@ QToolButton* makeTextButton(const QString& text, QWidget* parent) {
 }
 
 void applyPropertiesOverlayStyle(QFrame* panel) {
-    // Properties contains dense tables and charts, so it intentionally uses a substantially more
-    // opaque surface than the lightweight navigation overlays. The white surface also prevents
-    // the image underneath from changing table and label contrast.
+    // Match the main-window inspection card so the same data has the same visual language in
+    // both browse and full-screen modes.
     panel->setStyleSheet(QStringLiteral(
-        "QFrame#fullScreenRightPanel { background-color: rgba(255,255,255,246); "
-        "border: 1px solid rgba(40,40,45,120); border-radius: 8px; color: #202124; }"
-        "QFrame#fullScreenRightPanel QLabel { color: #202124; }"
-        "QFrame#fullScreenRightPanel QToolButton { color: #202124; "
-        "background-color: rgba(235,235,238,235); padding: 7px; "
-        "border: 1px solid rgba(70,70,75,90); border-radius: 5px; }"
-        "QFrame#fullScreenRightPanel QToolButton:hover, "
-        "QFrame#fullScreenRightPanel QToolButton:checked { "
-        "background-color: rgba(185,215,250,245); }"
-        "QFrame#fullScreenRightPanel QTreeWidget, "
-        "QFrame#fullScreenRightPanel QTableWidget, "
-        "QFrame#fullScreenRightPanel QComboBox { "
-        "background-color: rgba(255,255,255,242); color: #202124; "
-        "alternate-background-color: rgba(242,242,244,242); }"
-        "QFrame#fullScreenRightPanel QHeaderView::section { "
-        "background-color: rgba(232,232,235,245); color: #202124; }"
-        "QFrame#fullScreenRightPanel QTabWidget::pane { "
-        "background-color: rgba(255,255,255,230); "
-        "border: 1px solid rgba(70,70,75,65); }"
-        "QFrame#fullScreenRightPanel QTabBar::tab { "
-        "background-color: rgba(232,232,235,235); color: #202124; padding: 6px 10px; }"
-        "QFrame#fullScreenRightPanel QTabBar::tab:selected { "
-        "background-color: rgba(90,145,230,235); color: white; }"));
+        "QFrame#fullScreenRightPanel { background: #F7F9FA; border: 1px solid #D7DEE3; "
+        "border-radius: 10px; color: #33414B; }"
+        "QFrame#fullScreenRightPanel QLabel { color: #33414B; }"
+        "QFrame#fullScreenRightPanel QTreeWidget, QFrame#fullScreenRightPanel QTableWidget, "
+        "QFrame#fullScreenRightPanel QComboBox, QFrame#fullScreenRightPanel QSpinBox, "
+        "QFrame#fullScreenRightPanel QDoubleSpinBox { background: #FCFDFC; border: 1px solid #D7DEE3; "
+        "border-radius: 6px; color: #33414B; selection-background-color: #E8F0F4; }"
+        "QFrame#fullScreenRightPanel QTreeWidget::item { padding: 4px 6px; }"
+        "QFrame#fullScreenRightPanel QHeaderView::section { background: #F1F4F5; color: #71808A; "
+        "border: none; border-bottom: 1px solid #D7DEE3; padding: 6px; font-weight: 600; }"
+        "QFrame#fullScreenRightPanel QTabWidget::pane { background: #FCFDFC; border: 1px solid #D7DEE3; "
+        "border-radius: 8px; top: -1px; }"
+        "QFrame#fullScreenRightPanel QTabBar::tab { background: transparent; color: #71808A; "
+        "padding: 8px 12px; margin-right: 3px; }"
+        "QFrame#fullScreenRightPanel QTabBar::tab:selected { color: #2E5269; border-bottom: 2px solid #6C8799; }"
+        "QFrame#fullScreenRightPanel QToolButton { color: #33414B; background: #FCFDFC; "
+        "padding: 6px 10px; border: 1px solid #C9D4DA; border-radius: 6px; }"
+        "QFrame#fullScreenRightPanel QToolButton:hover { background: #EAF0F4; border-color: #9EB2BE; }"));
+}
+
+void applyContextMenuStyle(QMenu* menu) {
+    menu->setStyleSheet(QStringLiteral(
+        "QMenu { background: #FCFDFC; border: 1px solid #D7DEE3; border-radius: 8px; padding: 6px; }"
+        "QMenu::item { color: #33414B; min-width: 200px; padding: 8px 28px 8px 10px; "
+        "border-radius: 5px; margin: 0px; }"
+        "QMenu::item:selected { background: #EAF0F4; }"
+        "QMenu::item:disabled { color: #A9B2B8; }"
+        "QMenu::separator { height: 1px; background: #E1E6E9; margin: 4px 8px; }"));
 }
 
 } // namespace
@@ -91,11 +103,11 @@ void applyPropertiesOverlayStyle(QFrame* panel) {
 FullScreenWindow::FullScreenWindow(ImageLoader* loader, QStringList paths, int initialIndex,
                                    QWidget* parent)
     : QMainWindow(parent), loader_(loader), canvas_(new ImageCanvas(this)), topPanel_(nullptr),
-      leftPanel_(nullptr), rightPanel_(nullptr), bottomPanel_(nullptr), fileNameLabel_(nullptr),
+      rightPanel_(nullptr), bottomPanel_(nullptr), fileNameLabel_(nullptr),
       positionLabel_(nullptr), statusLabel_(nullptr), rightTitleLabel_(nullptr),
       propertiesPanel_(nullptr), contextMenu_(new QMenu(this)), revealAction_(nullptr),
-      showInformationAction_(nullptr), showHistogramAction_(nullptr),
-      panelHideTimer_(new QTimer(this)), paths_(std::move(paths)) {
+      showInformationAction_(nullptr), panelHideTimer_(new QTimer(this)),
+      bottomHideTimer_(new QTimer(this)), paths_(std::move(paths)) {
     setAttribute(Qt::WA_DeleteOnClose);
     setCentralWidget(canvas_);
     canvas_->setNavigationThumbnailEnabled(true);
@@ -104,8 +116,11 @@ FullScreenWindow::FullScreenWindow(ImageLoader* loader, QStringList paths, int i
     buildEdgePanels();
 
     panelHideTimer_->setSingleShot(true);
-    panelHideTimer_->setInterval(900);
+    panelHideTimer_->setInterval(650);
     connect(panelHideTimer_, &QTimer::timeout, this, &FullScreenWindow::hideTransientPanels);
+    bottomHideTimer_->setSingleShot(true);
+    bottomHideTimer_->setInterval(5'000);
+    connect(bottomHideTimer_, &QTimer::timeout, this, &FullScreenWindow::hideBottomPanel);
 
     connect(canvas_, &ImageCanvas::customContextMenuRequested, this,
             [this](const QPoint& position) {
@@ -136,7 +151,6 @@ FullScreenWindow::FullScreenWindow(ImageLoader* loader, QStringList paths, int i
 
 void FullScreenWindow::buildEdgePanels() {
     topPanel_ = makeOverlayPanel(QStringLiteral("fullScreenTopPanel"), canvas_);
-    leftPanel_ = makeOverlayPanel(QStringLiteral("fullScreenLeftPanel"), canvas_);
     rightPanel_ = makeOverlayPanel(QStringLiteral("fullScreenRightPanel"), canvas_);
     applyPropertiesOverlayStyle(rightPanel_);
     bottomPanel_ = makeOverlayPanel(QStringLiteral("fullScreenBottomPanel"), canvas_);
@@ -160,26 +174,6 @@ void FullScreenWindow::buildEdgePanels() {
     connect(previous, &QToolButton::clicked, this, [this] { showNeighbor(-1); });
     connect(next, &QToolButton::clicked, this, [this] { showNeighbor(1); });
 
-    auto* fit = makeTextButton(QStringLiteral("Fit"), leftPanel_);
-    fit->setObjectName(QStringLiteral("fullScreenFit"));
-    auto* actual = makeTextButton(QStringLiteral("100%"), leftPanel_);
-    actual->setObjectName(QStringLiteral("fullScreenActualPixels"));
-    auto* reveal = makeTextButton(QStringLiteral("Reveal"), leftPanel_);
-    reveal->setObjectName(QStringLiteral("fullScreenRevealButton"));
-    auto* close = makeTextButton(QStringLiteral("Close"), leftPanel_);
-    close->setObjectName(QStringLiteral("fullScreenClose"));
-    auto* leftLayout = new QVBoxLayout(leftPanel_);
-    leftLayout->setContentsMargins(7, 7, 7, 7);
-    leftLayout->addWidget(fit);
-    leftLayout->addWidget(actual);
-    leftLayout->addWidget(reveal);
-    leftLayout->addStretch(1);
-    leftLayout->addWidget(close);
-    connect(fit, &QToolButton::clicked, canvas_, &ImageCanvas::fitImage);
-    connect(actual, &QToolButton::clicked, canvas_, &ImageCanvas::actualPixels);
-    connect(reveal, &QToolButton::clicked, this, &FullScreenWindow::revealCurrentFile);
-    connect(close, &QToolButton::clicked, this, &QWidget::close);
-
     statusLabel_ = new QLabel(bottomPanel_);
     statusLabel_->setObjectName(QStringLiteral("fullScreenStatus"));
     statusLabel_->setAlignment(Qt::AlignCenter);
@@ -188,7 +182,7 @@ void FullScreenWindow::buildEdgePanels() {
     bottomLayout->setContentsMargins(12, 6, 12, 6);
     bottomLayout->addWidget(statusLabel_, 1);
 
-    rightTitleLabel_ = new QLabel(QStringLiteral("Properties"), rightPanel_);
+    rightTitleLabel_ = new QLabel(QStringLiteral("IMAGE INSPECTION"), rightPanel_);
     rightTitleLabel_->setObjectName(QStringLiteral("fullScreenRightTitle"));
     auto* hideRight = makeTextButton(QStringLiteral("×"), rightPanel_);
     hideRight->setObjectName(QStringLiteral("fullScreenHideRightPanel"));
@@ -199,42 +193,42 @@ void FullScreenWindow::buildEdgePanels() {
     rightHeader->addWidget(rightTitleLabel_, 1);
     rightHeader->addWidget(hideRight);
     auto* rightLayout = new QVBoxLayout(rightPanel_);
-    rightLayout->setContentsMargins(8, 6, 8, 8);
+    rightLayout->setContentsMargins(14, 12, 14, 14);
+    rightLayout->setSpacing(10);
     rightLayout->addLayout(rightHeader);
     rightLayout->addWidget(propertiesPanel_, 1);
     connect(hideRight, &QToolButton::clicked, this, &FullScreenWindow::hideRightOverlay);
-    revealAction_ = contextMenu_->addAction(QStringLiteral("Show in File Manager"));
+    applyContextMenuStyle(contextMenu_);
+    auto* cutAction = contextMenu_->addAction(QStringLiteral("Cut"));
+    auto* copyAction = contextMenu_->addAction(QStringLiteral("Copy"));
+    auto* renameAction = contextMenu_->addAction(QStringLiteral("Rename…"));
+    auto* trashAction = contextMenu_->addAction(QStringLiteral("Move to Trash"));
+    contextMenu_->addSeparator();
+    revealAction_ = contextMenu_->addAction(
+        QStringLiteral("Reveal in Finder / Explorer"));
     revealAction_->setObjectName(QStringLiteral("fullScreenRevealAction"));
     contextMenu_->addSeparator();
-    showInformationAction_ = contextMenu_->addAction(QStringLiteral("Show Properties"));
+    auto* displayMenu = contextMenu_->addMenu(QStringLiteral("Display"));
+    applyContextMenuStyle(displayMenu);
+    auto* actualPixelsAction = displayMenu->addAction(QStringLiteral("1:1"));
+    auto* fitAction = displayMenu->addAction(QStringLiteral("Fit"));
+    contextMenu_->addSeparator();
+    showInformationAction_ = contextMenu_->addAction(QStringLiteral("Properties"));
     showInformationAction_->setObjectName(QStringLiteral("fullScreenShowInformationAction"));
-    showInformationAction_->setCheckable(true);
-    showHistogramAction_ = contextMenu_->addAction(QStringLiteral("Show Histogram"));
-    showHistogramAction_->setObjectName(QStringLiteral("fullScreenShowHistogramAction"));
-    showHistogramAction_->setCheckable(true);
     contextMenu_->setObjectName(QStringLiteral("fullScreenContextMenu"));
+    connect(cutAction, &QAction::triggered, this,
+            [this] { FileClipboard::setPaths({currentPath()}, true); });
+    connect(copyAction, &QAction::triggered, this,
+            [this] { FileClipboard::setPaths({currentPath()}, false); });
+    connect(renameAction, &QAction::triggered, this, &FullScreenWindow::renameCurrentFile);
+    connect(trashAction, &QAction::triggered, this, &FullScreenWindow::moveCurrentFileToTrash);
     connect(revealAction_, &QAction::triggered, this, &FullScreenWindow::revealCurrentFile);
-    connect(showInformationAction_, &QAction::toggled, this, [this](bool checked) {
-        if (checked) {
-            const QSignalBlocker blocker(showHistogramAction_);
-            showHistogramAction_->setChecked(false);
-            setRightOverlay(RightOverlay::Information, true);
-        } else if (!showHistogramAction_->isChecked()) {
-            hideRightOverlay();
-        }
-    });
-    connect(showHistogramAction_, &QAction::toggled, this, [this](bool checked) {
-        if (checked) {
-            const QSignalBlocker blocker(showInformationAction_);
-            showInformationAction_->setChecked(false);
-            setRightOverlay(RightOverlay::Histogram, true);
-        } else if (!showInformationAction_->isChecked()) {
-            hideRightOverlay();
-        }
-    });
+    connect(actualPixelsAction, &QAction::triggered, canvas_, &ImageCanvas::actualPixels);
+    connect(fitAction, &QAction::triggered, canvas_, &ImageCanvas::fitImage);
+    connect(showInformationAction_, &QAction::triggered, this,
+            &FullScreenWindow::showPropertiesOverlay);
 
-    for (QWidget* panel :
-         std::array<QWidget*, 4>{topPanel_, leftPanel_, rightPanel_, bottomPanel_}) {
+    for (QWidget* panel : std::array<QWidget*, 3>{topPanel_, rightPanel_, bottomPanel_}) {
         panel->installEventFilter(this);
         for (QWidget* child : panel->findChildren<QWidget*>()) {
             child->installEventFilter(this);
@@ -251,27 +245,36 @@ bool FullScreenWindow::eventFilter(QObject* watched, QEvent* event) {
             target = topPanel_;
         } else if (position.y() >= canvas_->height() - edgeTriggerWidth) {
             target = bottomPanel_;
-        } else if (position.x() <= edgeTriggerWidth) {
-            target = leftPanel_;
         } else if (position.x() >= canvas_->width() - edgeTriggerWidth) {
             target = rightPanel_;
         }
         if (target) {
             showTransientPanel(target);
-        } else if (topPanel_->isVisible() || leftPanel_->isVisible() || bottomPanel_->isVisible() ||
-                   (rightPanel_->isVisible() && !rightPanelPinned_)) {
+        } else if (topPanel_->isVisible() || rightPanel_->isVisible()) {
             panelHideTimer_->start();
+            if (bottomPanel_->isVisible()) {
+                bottomHideTimer_->start();
+            }
+        } else if (bottomPanel_->isVisible()) {
+            bottomHideTimer_->start();
         }
     } else if (auto* widget = qobject_cast<QWidget*>(watched);
                widget && (widget == topPanel_ || topPanel_->isAncestorOf(widget) ||
-                          widget == leftPanel_ || leftPanel_->isAncestorOf(widget) ||
                           widget == rightPanel_ || rightPanel_->isAncestorOf(widget) ||
                           widget == bottomPanel_ || bottomPanel_->isAncestorOf(widget))) {
         if (event->type() == QEvent::Enter || event->type() == QEvent::MouseMove ||
             event->type() == QEvent::MouseButtonPress) {
-            panelHideTimer_->stop();
+            if (widget == bottomPanel_ || bottomPanel_->isAncestorOf(widget)) {
+                bottomHideTimer_->stop();
+            } else {
+                panelHideTimer_->stop();
+            }
         } else if (event->type() == QEvent::Leave) {
-            panelHideTimer_->start();
+            if (widget == bottomPanel_ || bottomPanel_->isAncestorOf(widget)) {
+                bottomHideTimer_->start();
+            } else {
+                panelHideTimer_->start();
+            }
         }
     }
     return QMainWindow::eventFilter(watched, event);
@@ -371,17 +374,7 @@ void FullScreenWindow::requestFullFrame(const QString& path, quint64 generation)
 void FullScreenWindow::showNeighbor(int delta) { showIndex(index_ + delta); }
 
 void FullScreenWindow::updateStatus() {
-    if (!canvas_->frame()) {
-        return;
-    }
-    const auto& frame = *canvas_->frame();
-    statusLabel_->setText(
-        QStringLiteral("%1  %2×%3  %4%")
-            .arg(frame.metadata.fileName)
-            .arg(frame.descriptor.size.width())
-            .arg(frame.descriptor.size.height())
-            .arg(QString::number(canvas_->viewState().pixelsPerImagePixel * 100.0, 'f', 1)) +
-        pixelText_);
+    statusLabel_->setText(pixelText_.trimmed());
 }
 
 void FullScreenWindow::layoutEdgePanels() {
@@ -394,27 +387,20 @@ void FullScreenWindow::layoutEdgePanels() {
     topPanel_->setGeometry((width - horizontalWidth) / 2, 12, horizontalWidth, 54);
     bottomPanel_->setGeometry((width - horizontalWidth) / 2, std::max(12, height - 66),
                               horizontalWidth, 54);
-    const int leftHeight = std::min(360, std::max(1, height - 40));
-    leftPanel_->setGeometry(12, (height - leftHeight) / 2, 92, leftHeight);
-    const int rightWidth = std::min(560, std::max(1, width - 40));
+    const int rightWidth = std::min(600, std::max(1, width - 40));
     const int rightHeight = std::min(760, std::max(1, height - 40));
     rightPanel_->setGeometry(std::max(12, width - rightWidth - 14), (height - rightHeight) / 2,
                              rightWidth, rightHeight);
-    for (QWidget* panel :
-         std::array<QWidget*, 4>{topPanel_, leftPanel_, rightPanel_, bottomPanel_}) {
+    for (QWidget* panel : std::array<QWidget*, 3>{topPanel_, rightPanel_, bottomPanel_}) {
         panel->raise();
     }
 }
 
 void FullScreenWindow::showTransientPanel(QWidget* panel) {
-    panelHideTimer_->stop();
-    for (QWidget* candidate : std::array<QWidget*, 3>{topPanel_, leftPanel_, bottomPanel_}) {
-        if (candidate != panel) {
-            candidate->hide();
-        }
-    }
-    if (panel != rightPanel_ && !rightPanelPinned_) {
-        rightPanel_->hide();
+    if (panel == bottomPanel_) {
+        bottomHideTimer_->stop();
+    } else {
+        panelHideTimer_->stop();
     }
     panel->show();
     panel->raise();
@@ -422,31 +408,62 @@ void FullScreenWindow::showTransientPanel(QWidget* panel) {
 
 void FullScreenWindow::hideTransientPanels() {
     topPanel_->hide();
-    leftPanel_->hide();
-    bottomPanel_->hide();
-    if (!rightPanelPinned_) {
-        rightPanel_->hide();
-    }
+    rightPanel_->hide();
 }
 
-void FullScreenWindow::setRightOverlay(RightOverlay overlay, bool pinned) {
-    rightPanelPinned_ = pinned;
-    const bool information = overlay == RightOverlay::Information;
-    propertiesPanel_->showTab(information ? ImagePropertiesPanel::Tab::Exif
-                                          : ImagePropertiesPanel::Tab::Histogram);
-    rightTitleLabel_->setText(QStringLiteral("Properties"));
+void FullScreenWindow::hideBottomPanel() { bottomPanel_->hide(); }
+
+void FullScreenWindow::showPropertiesOverlay() {
+    propertiesPanel_->showTab(ImagePropertiesPanel::Tab::Exif);
+    rightTitleLabel_->setText(QStringLiteral("IMAGE INSPECTION"));
     rightPanel_->show();
     rightPanel_->raise();
     panelHideTimer_->stop();
 }
 
 void FullScreenWindow::hideRightOverlay() {
-    const QSignalBlocker informationBlocker(showInformationAction_);
-    const QSignalBlocker histogramBlocker(showHistogramAction_);
-    showInformationAction_->setChecked(false);
-    showHistogramAction_->setChecked(false);
-    rightPanelPinned_ = false;
     rightPanel_->hide();
+}
+
+void FullScreenWindow::renameCurrentFile() {
+    const QString sourcePath = currentPath();
+    const QFileInfo source(sourcePath);
+    if (sourcePath.isEmpty() || !source.exists()) {
+        return;
+    }
+    bool accepted = false;
+    const QString newName = QInputDialog::getText(this, QStringLiteral("Rename"),
+                                                  QStringLiteral("Name"), QLineEdit::Normal,
+                                                  source.fileName(), &accepted);
+    if (!accepted || newName == source.fileName()) {
+        return;
+    }
+    const QString destination = source.dir().filePath(newName);
+    QString error;
+    if (!SingleFileRename::execute(sourcePath, destination, &error)) {
+        QMessageBox::warning(this, QStringLiteral("Rename"), error);
+        return;
+    }
+    paths_[index_] = destination;
+    showIndex(index_);
+}
+
+void FullScreenWindow::moveCurrentFileToTrash() {
+    const QString path = currentPath();
+    if (path.isEmpty() || !TrashConfirmation::request(this, 1)) {
+        return;
+    }
+    if (!QFile::moveToTrash(path)) {
+        QMessageBox::warning(this, QStringLiteral("Move to Trash"),
+                             QStringLiteral("The file could not be moved to the system Trash."));
+        return;
+    }
+    paths_.removeAt(index_);
+    if (paths_.isEmpty()) {
+        close();
+        return;
+    }
+    showIndex(std::min(index_, static_cast<int>(paths_.size()) - 1));
 }
 
 void FullScreenWindow::revealCurrentFile() {

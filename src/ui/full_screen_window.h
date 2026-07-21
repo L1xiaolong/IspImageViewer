@@ -32,8 +32,6 @@ class FullScreenWindow final : public QMainWindow {
     void resizeEvent(QResizeEvent* event) override;
 
   private:
-    enum class RightOverlay { Information, Histogram };
-
     void buildEdgePanels();
     void showIndex(int index);
     void showNeighbor(int delta);
@@ -42,15 +40,17 @@ class FullScreenWindow final : public QMainWindow {
     void layoutEdgePanels();
     void showTransientPanel(QWidget* panel);
     void hideTransientPanels();
-    void setRightOverlay(RightOverlay overlay, bool pinned);
+    void hideBottomPanel();
+    void showPropertiesOverlay();
     void hideRightOverlay();
     void revealCurrentFile();
+    void renameCurrentFile();
+    void moveCurrentFileToTrash();
     [[nodiscard]] QString currentPath() const;
 
     ImageLoader* loader_;
     ImageCanvas* canvas_;
     QFrame* topPanel_;
-    QFrame* leftPanel_;
     QFrame* rightPanel_;
     QFrame* bottomPanel_;
     QLabel* fileNameLabel_;
@@ -61,13 +61,12 @@ class FullScreenWindow final : public QMainWindow {
     QMenu* contextMenu_;
     QAction* revealAction_;
     QAction* showInformationAction_;
-    QAction* showHistogramAction_;
     QTimer* panelHideTimer_;
+    QTimer* bottomHideTimer_;
     QStringList paths_;
     int index_ = -1;
     quint64 generation_ = 0;
     QString pixelText_;
-    bool rightPanelPinned_ = false;
 };
 
 } // namespace ispview

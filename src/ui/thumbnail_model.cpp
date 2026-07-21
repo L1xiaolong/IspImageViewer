@@ -6,14 +6,26 @@
 #include <QApplication>
 #include <QFileInfo>
 #include <QIcon>
+#include <QLocale>
 #include <QMimeData>
 #include <QPainter>
 #include <QPointer>
 #include <QStyle>
 #include <QUrl>
 
+#include <utility>
+
 namespace ispview {
 namespace {
+
+QString formattedFileSize(qint64 bytes) {
+    constexpr qint64 mebibyte = 1024LL * 1024LL;
+    if (bytes >= mebibyte) {
+        return QStringLiteral("%1 MB")
+            .arg(QLocale().toString(static_cast<double>(bytes) / mebibyte, 'f', 1));
+    }
+    return QStringLiteral("%1 KB").arg(QLocale().toString(qMax<qint64>(1, bytes / 1024)));
+}
 
 QPixmap textPlaceholder(const QString& text) {
     QPixmap result(160, 120);
@@ -54,11 +66,11 @@ QVariant ThumbnailModel::data(const QModelIndex& index, int role) const {
         requestThumbnail(index.row());
         return placeholder_;
     case Qt::ToolTipRole:
-        return file.isDirectory ? QStringLiteral("%1\nFolder").arg(file.path)
-                                : QStringLiteral("%1\n%2 KB\nModified %3")
-                                      .arg(file.path)
-                                      .arg(QString::number(file.fileSize / 1024))
-                                      .arg(file.modifiedAt.toString(Qt::ISODate));
+        return file.isDirectory
+                   ? QStringLiteral("%1\nFolder").arg(file.path)
+                   : QStringLiteral("%1\n%2\nModified %3")
+                         .arg(file.path, formattedFileSize(file.fileSize),
+                              file.modifiedAt.toString(Qt::ISODate));
     case PathRole:
         return file.path;
     case SizeRole:
@@ -72,6 +84,35 @@ QVariant ThumbnailModel::data(const QModelIndex& index, int role) const {
                                 : QFileInfo(file.fileName).suffix().toCaseFolded();
     case DimensionsRole:
         return dimensions_.value(file.path);
+    case ThumbnailUrlRole:
+        if (!file.isDirectory) {
+            // Asking for the QML URL also starts the existing asynchronous metadata path. This
+            // keeps the technical label updated without moving decode work into QML.
+            requestThumbnail(index.row());
+        }
+        return file.isDirectory
+                   ? QStringLiteral("qrc:/icons/ui/folder.svg")
+                   : QStringLiteral("image://thumbnail/%1")
+                         .arg(QString::fromLatin1(QUrl::toPercentEncoding(file.path)));
+    case FileNameRole:
+        return file.fileName;
+    case TechnicalLabelRole: {
+        if (file.isDirectory) {
+            return QStringLiteral("Folder");
+        }
+        const QSize dimensions = dimensions_.value(file.path);
+        const QString dimensionText =
+            dimensions.isValid()
+                ? QStringLiteral("%1×%2").arg(dimensions.width()).arg(dimensions.height())
+                : QStringLiteral("Reading size…");
+        const QString type = QFileInfo(file.fileName).suffix().toUpper();
+        return QStringLiteral("%1 · %2 · %3")
+            .arg(dimensionText, type, formattedFileSize(file.fileSize));
+    }
+    case SelectedRole:
+        return selectedPaths_.contains(file.path);
+    case SelectionOrdinalRole:
+        return selectedPaths_.indexOf(file.path) + 1;
     default:
         return {};
     }
@@ -85,7 +126,36 @@ QHash<int, QByteArray> ThumbnailModel::roleNames() const {
     roles.insert(DirectoryRole, "isDirectory");
     roles.insert(TypeRole, "fileType");
     roles.insert(DimensionsRole, "dimensions");
+    roles.insert(ThumbnailUrlRole, "thumbnailUrl");
+    roles.insert(FileNameRole, "fileName");
+    roles.insert(TechnicalLabelRole, "technicalLabel");
+    roles.insert(SelectedRole, "isSelected");
+    roles.insert(SelectionOrdinalRole, "selectionOrdinal");
     return roles;
+}
+
+void ThumbnailModel::setSelectedPaths(const QStringList& paths) {
+    if (selectedPaths_ == paths) {
+        return;
+    }
+    const QStringList previous = std::exchange(selectedPaths_, paths);
+    QSet<int> rows;
+    for (const QString& path : previous) {
+        const int row = pathToRow_.value(path, -1);
+        if (row >= 0) {
+            rows.insert(row);
+        }
+    }
+    for (const QString& path : selectedPaths_) {
+        const int row = pathToRow_.value(path, -1);
+        if (row >= 0) {
+            rows.insert(row);
+        }
+    }
+    for (int row : std::as_const(rows)) {
+        const QModelIndex changed = index(row);
+        emit dataChanged(changed, changed, {SelectedRole, SelectionOrdinalRole});
+    }
 }
 
 Qt::ItemFlags ThumbnailModel::flags(const QModelIndex& index) const {
@@ -263,7 +333,8 @@ void ThumbnailModel::requestThumbnail(int row) const {
                 const int failedRow = model->pathToRow_.value(path, -1);
                 if (failedRow >= 0) {
                     const QModelIndex changed = model->index(failedRow);
-                    emit model->dataChanged(changed, changed, {Qt::DecorationRole});
+                    emit model->dataChanged(changed, changed,
+                                            {Qt::DecorationRole, TechnicalLabelRole});
                 }
                 return;
             }
@@ -276,7 +347,8 @@ void ThumbnailModel::requestThumbnail(int row) const {
             if (row >= 0) {
                 const QModelIndex changed = model->index(row);
                 emit model->dataChanged(changed, changed,
-                                        {Qt::DecorationRole, ThumbnailModel::DimensionsRole});
+                                        {Qt::DecorationRole, ThumbnailModel::DimensionsRole,
+                                         ThumbnailModel::TechnicalLabelRole});
             }
         },
         -1);

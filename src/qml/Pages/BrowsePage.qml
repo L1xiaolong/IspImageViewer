@@ -1,0 +1,1624 @@
+pragma ComponentBehavior: Bound
+// qmllint disable unqualified
+import QtQuick
+import QtQuick.Controls
+import "../Isp"
+
+Rectangle {
+    id: root
+    objectName: "browsePage"
+    color: Theme.sensorWhite
+    // Kept injectable for production and design-time mocks. Qt Design Studio's
+    // 2D puppet does not instantiate custom components with required var props.
+    property var controller: null
+    property bool navigatorVisible: true
+    property real navigatorWidth: Theme.sidebarWidth
+    property real galleryStripWidth: 280
+    property int displayMode: 0
+    property bool designMode: false
+    property string iconPrefix: "qrc:/icons/ui/"
+    readonly property var sortLabels: ["Name", "Modified", "Size", "Type"]
+    readonly property bool fileShortcutsEnabled: !toolbar.searchControl.activeFocus &&
+                                                  !folderNameField.activeFocus &&
+                                                  !newFolderDialog.opened
+    function pathIsRaw(path) {
+        const lowered = path.toLowerCase();
+        return lowered.endsWith(".raw") || lowered.endsWith(".yuv");
+    }
+
+    // Retained temporarily as a hidden migration reference. The visible and
+    // interactive toolbar below is the same TopToolbar.ui.qml opened by Design Studio.
+    Rectangle {
+        id: legacyToolbar
+        visible: false
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        height: Theme.toolbarHeight
+        color: Theme.paperWhite
+        border.color: Theme.opticalGray
+        border.width: 0
+
+        Item {
+            id: toolbarContent
+            anchors.fill: parent
+            readonly property bool compact: width < 1220
+
+            Text {
+                id: productName
+                visible: !toolbarContent.compact
+                x: 20
+                width: 166
+                anchors.verticalCenter: parent.verticalCenter
+                text: "ISP Image Viewer"
+                color: Theme.graphiteInk
+                font.family: Theme.uiFont
+                font.pixelSize: 17
+                font.weight: Font.DemiBold
+            }
+
+            Rectangle {
+                id: brandDivider
+                visible: !toolbarContent.compact
+                x: 198
+                y: 19
+                width: 1
+                height: 26
+                color: Theme.opticalGray
+            }
+
+            Item {
+                id: primaryToolCluster
+                x: toolbarContent.compact ? 12 : 210
+                y: 12
+                width: 598
+                height: 40
+                transformOrigin: Item.Left
+                scale: toolbarContent.compact
+                       ? Math.max(0.78, Math.min(1, (toolbarContent.width - 430) / width))
+                       : 1
+
+                Row {
+                    x: 0
+                    y: 0
+                    spacing: 2
+                    AppIconButton {
+                        iconSource: root.iconPrefix + "grid.svg"
+                        toolTipText: "Grid view"
+                        checkable: true
+                        checked: root.displayMode === 0
+                        implicitWidth: 40
+                        implicitHeight: 40
+                        onClicked: root.displayMode = 0
+                    }
+                    AppIconButton {
+                        iconSource: root.iconPrefix + "list.svg"
+                        toolTipText: "List view"
+                        checkable: true
+                        checked: root.displayMode === 1
+                        implicitWidth: 40
+                        implicitHeight: 40
+                        onClicked: root.displayMode = 1
+                    }
+                    AppIconButton {
+                        iconSource: root.iconPrefix + "columns.svg"
+                        toolTipText: "Compact view"
+                        checkable: true
+                        checked: root.displayMode === 2
+                        implicitWidth: 40
+                        implicitHeight: 40
+                        onClicked: root.displayMode = 2
+                    }
+                }
+
+                Rectangle {
+                    x: 138
+                    y: 7
+                    width: 1
+                    height: 26
+                    color: Theme.opticalGray
+                }
+
+                Slider {
+                    id: thumbnailSizeSlider
+                    objectName: "thumbnailSizeSlider"
+                    x: 156
+                    y: 0
+                    width: 146
+                    height: 40
+                    from: 168
+                    to: 260
+                    stepSize: 4
+                    value: root.controller.gridCellWidth
+                    onMoved: root.controller.gridCellWidth = Math.round(value)
+                    ToolTip.visible: hovered || pressed
+                    ToolTip.text: Math.round(value) + " px"
+                    background: Rectangle {
+                        x: thumbnailSizeSlider.leftPadding
+                        y: thumbnailSizeSlider.topPadding + thumbnailSizeSlider.availableHeight / 2 - 1
+                        width: thumbnailSizeSlider.availableWidth
+                        height: 2
+                        radius: 1
+                        color: Theme.opticalGray
+                        Rectangle {
+                            width: thumbnailSizeSlider.visualPosition * parent.width
+                            height: parent.height
+                            radius: 1
+                            color: Theme.mutedInk
+                        }
+                    }
+                    handle: Rectangle {
+                        x: thumbnailSizeSlider.leftPadding + thumbnailSizeSlider.visualPosition * (thumbnailSizeSlider.availableWidth - width)
+                        y: thumbnailSizeSlider.topPadding + thumbnailSizeSlider.availableHeight / 2 - height / 2
+                        width: 16
+                        height: 16
+                        radius: 8
+                        color: Theme.paperWhite
+                        border.color: thumbnailSizeSlider.activeFocus ? Theme.probeBlue : Theme.opticalGray
+                        border.width: thumbnailSizeSlider.activeFocus ? 2 : 1
+                    }
+                }
+
+                Rectangle {
+                    x: 318
+                    y: 7
+                    width: 1
+                    height: 26
+                    color: Theme.opticalGray
+                }
+
+                Button {
+                    id: sortButton
+                    objectName: "sortButton"
+                    x: 332
+                    y: 0
+                    width: 136
+                    height: 40
+                    hoverEnabled: true
+                    onClicked: sortMenu.popup()
+                    background: Rectangle {
+                        color: sortButton.down ? Theme.opticalGray : sortButton.hovered ? Theme.softHover : "transparent"
+                        radius: Theme.radius
+                        border.color: sortButton.activeFocus ? Theme.probeBlue : "transparent"
+                        border.width: 1
+                    }
+                    contentItem: Row {
+                        anchors.centerIn: parent
+                        spacing: 6
+                        Text {
+                            text: "Sort:  " + root.sortLabels[root.controller.sortMode]
+                            color: Theme.graphiteInk
+                            font.family: Theme.uiFont
+                            font.pixelSize: 13
+                        }
+                        Image {
+                            width: 16
+                            height: 16
+                            source: root.iconPrefix + "chevron-down.svg"
+                        }
+                    }
+                }
+
+                Rectangle {
+                    x: 482
+                    y: 7
+                    width: 1
+                    height: 26
+                    color: Theme.opticalGray
+                }
+
+                Rectangle {
+                    x: 498
+                    y: 0
+                    width: 100
+                    height: 40
+                    color: "transparent"
+                    radius: Theme.radius
+                    border.color: Theme.opticalGray
+                    border.width: 1
+
+                    AppIconButton {
+                        id: folderButton
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: 61
+                        iconSource: root.iconPrefix + "folder-open.svg"
+                        toolTipText: "Folder operations"
+                        onClicked: folderMenu.popup()
+                        Image {
+                            anchors.right: parent.right
+                            anchors.rightMargin: 4
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 14
+                            height: 14
+                            source: root.iconPrefix + "chevron-down.svg"
+                        }
+                    }
+                    Rectangle {
+                        anchors.left: folderButton.right
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: 1
+                        color: Theme.opticalGray
+                    }
+                    AppIconButton {
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: 38
+                        iconSource: root.iconPrefix + "plus.svg"
+                        toolTipText: "New folder"
+                        onClicked: newFolderDialog.open()
+                    }
+                }
+            }
+
+            Button {
+                id: compareButton
+                objectName: "compareButton"
+                anchors.right: parent.right
+                anchors.rightMargin: 20
+                y: 12
+                width: 126
+                height: 40
+                enabled: root.controller.canCompare
+                hoverEnabled: true
+                onClicked: root.controller.compareSelected()
+                background: Rectangle {
+                    color: compareButton.enabled && (compareButton.down || compareButton.hovered) ? "#E7EDFC" : Theme.paperWhite
+                    radius: Theme.radius
+                    border.color: compareButton.enabled ? Theme.probeBlue : Theme.opticalGray
+                    border.width: 1
+                }
+                contentItem: Row {
+                    anchors.centerIn: parent
+                    spacing: 7
+                    Image {
+                        width: 18
+                        height: 18
+                        opacity: compareButton.enabled ? 1 : 0.42
+                        source: root.iconPrefix + "compare.svg"
+                    }
+                    Text {
+                        text: "Compare"
+                        color: compareButton.enabled ? Theme.probeBlue : Theme.mutedInk
+                        font.family: Theme.uiFont
+                        font.pixelSize: 13
+                        font.weight: Font.DemiBold
+                    }
+                }
+                ToolTip.visible: hovered && !enabled
+                ToolTip.text: "Select 2–4 images to compare"
+            }
+
+            TextField {
+                id: searchField
+                objectName: "browserSearchField"
+                anchors.right: compareButton.left
+                anchors.rightMargin: 12
+                y: 12
+                width: 244
+                height: 40
+                placeholderText: "Search files"
+                selectByMouse: true
+                leftPadding: 34
+                rightPadding: clearSearch.visible ? 30 : 10
+                color: Theme.graphiteInk
+                font.family: Theme.uiFont
+                font.pixelSize: 13
+                background: Rectangle {
+                    color: Theme.sensorWhite
+                    radius: Theme.radius
+                    border.color: searchField.activeFocus ? Theme.probeBlue : Theme.opticalGray
+                    border.width: 1
+                    Image {
+                        x: 9
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 18
+                        height: 18
+                        source: root.iconPrefix + "search.svg"
+                    }
+                }
+                Text {
+                    id: clearSearch
+                    visible: searchField.text.length > 0
+                    anchors.right: parent.right
+                    anchors.rightMargin: 9
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "×"
+                    color: clearMouse.containsMouse ? Theme.graphiteInk : Theme.mutedInk
+                    font.pixelSize: 17
+                    MouseArea {
+                        id: clearMouse
+                        anchors.fill: parent
+                        anchors.margins: -7
+                        hoverEnabled: true
+                        onClicked: searchField.clear()
+                    }
+                }
+                onTextChanged: root.controller.setFilterText(text)
+            }
+        }
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: 1
+            color: Theme.opticalGray
+        }
+    }
+
+    TopToolbar {
+        id: toolbar
+        objectName: "topToolbar"
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        height: Theme.toolbarHeight
+        iconPrefix: root.iconPrefix
+        displayMode: root.displayMode
+        compareEnabled: root.controller.canCompare
+        navigationWidth: root.navigatorWidth
+    }
+
+    Connections {
+        target: toolbar.gridControl
+        function onClicked() { root.displayMode = 0; }
+    }
+    Connections {
+        target: toolbar.listControl
+        function onClicked() { root.displayMode = 1; }
+    }
+    Connections {
+        target: toolbar.galleryControl
+        function onClicked() { root.displayMode = 2; }
+    }
+    Connections {
+        target: toolbar.openFolderControl
+        function onClicked() { root.controller.chooseDirectory(); }
+    }
+    Connections {
+        target: toolbar.newFolderControl
+        function onClicked() { newFolderDialog.open(); }
+    }
+    Connections {
+        target: toolbar.folderCompareControl
+        function onClicked() { root.controller.openMultiFolder(); }
+    }
+    Connections {
+        target: toolbar.searchControl
+        function onTextChanged() {
+            root.controller.setFilterText(toolbar.searchControl.text);
+        }
+    }
+    Connections {
+        target: toolbar.clearSearchControl
+        function onClicked() { toolbar.searchControl.clear(); }
+    }
+    Connections {
+        target: toolbar.compareControl
+        function onClicked() { root.controller.compareSelected(); }
+    }
+    Connections {
+        target: root.controller
+        function onGalleryImageChanged() {
+            if (root.controller.galleryImageReady &&
+                    galleryWorkspace.pixelProbeText === "Loading pixel data…")
+                galleryWorkspace.pixelProbeText = "";
+        }
+    }
+
+    Menu {
+        id: sortMenu
+        MenuItem {
+            text: "Name"
+            checkable: true
+            checked: root.controller.sortMode === 0
+            onTriggered: root.controller.setSortMode(0)
+        }
+        MenuItem {
+            text: "Modified time"
+            checkable: true
+            checked: root.controller.sortMode === 1
+            onTriggered: root.controller.setSortMode(1)
+        }
+        MenuItem {
+            text: "File size"
+            checkable: true
+            checked: root.controller.sortMode === 2
+            onTriggered: root.controller.setSortMode(2)
+        }
+        MenuItem {
+            text: "File type"
+            checkable: true
+            checked: root.controller.sortMode === 3
+            onTriggered: root.controller.setSortMode(3)
+        }
+    }
+
+    Menu {
+        id: folderMenu
+        MenuItem {
+            text: "Open folder…"
+            onTriggered: root.controller.chooseDirectory()
+        }
+        MenuItem {
+            text: "Back"
+            enabled: root.controller.canGoBack
+            onTriggered: root.controller.navigateBack()
+        }
+        MenuItem {
+            text: "Forward"
+            enabled: root.controller.canGoForward
+            onTriggered: root.controller.navigateForward()
+        }
+        MenuItem {
+            text: "Parent folder"
+            enabled: root.controller.canGoUp
+            onTriggered: root.controller.navigateUp()
+        }
+        MenuSeparator {}
+        MenuItem {
+            text: "Multi-folder workspace…"
+            onTriggered: root.controller.openMultiFolder()
+        }
+    }
+
+    // Design reference: Quick Folder Navigator, collapsible with Cmd/Ctrl+B.
+    FolderNavigator {
+        id: navigator
+        objectName: "folderNavigator"
+        controller: root.controller
+        designMode: root.designMode
+        iconPrefix: root.iconPrefix
+        anchors.left: parent.left
+        anchors.top: toolbar.bottom
+        anchors.bottom: statusRail.top
+        width: root.navigatorVisible ? root.navigatorWidth : 0
+        opacity: root.navigatorVisible ? 1 : 0
+        Behavior on width {
+            enabled: !resizeMouse.pressed
+            NumberAnimation {
+                duration: Theme.normal
+                easing.type: Easing.OutCubic
+            }
+        }
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Theme.fast
+            }
+        }
+    }
+
+    Rectangle {
+        id: gutter
+        anchors.left: navigator.right
+        anchors.top: toolbar.bottom
+        anchors.bottom: statusRail.top
+        width: root.navigatorVisible ? 1 : 0
+        color: resizeMouse.containsMouse || resizeMouse.pressed ? "#7893A6" : Theme.opticalGray
+        z: 20
+
+        MouseArea {
+            id: resizeMouse
+            anchors.centerIn: parent
+            width: 11
+            height: parent.height
+            enabled: root.navigatorVisible
+            hoverEnabled: true
+            cursorShape: Qt.SizeHorCursor
+            property real lastRootX: 0
+
+            onPressed: function (mouse) {
+                lastRootX = mapToItem(root, mouse.x, mouse.y).x;
+            }
+            onPositionChanged: function (mouse) {
+                if (!pressed)
+                    return;
+                const currentRootX = mapToItem(root, mouse.x, mouse.y).x;
+                const maximumWidth = Math.max(220, Math.min(420, root.width - 560));
+                root.navigatorWidth = Math.max(200, Math.min(maximumWidth,
+                                                             root.navigatorWidth + currentRootX - lastRootX));
+                lastRootX = currentRootX;
+            }
+        }
+    }
+
+    // Design reference: calibration contact sheet. Selection is a 2px rail, not a blue card.
+    GridView {
+        id: contactSheet
+        objectName: "contactSheet"
+        visible: root.displayMode !== 2
+        anchors.left: gutter.right
+        anchors.right: parent.right
+        anchors.top: toolbar.bottom
+        anchors.bottom: statusRail.top
+        anchors.margins: 20
+        clip: true
+        model: root.controller.thumbnails
+        readonly property int visualCellWidth: root.controller.gridCellWidth
+        cellWidth: root.displayMode === 1 ? width : visualCellWidth + 16
+        cellHeight: root.displayMode === 1 ? 76 : Math.round(visualCellWidth * 0.75) + 74
+        boundsBehavior: Flickable.StopAtBounds
+        reuseItems: true
+        keyNavigationEnabled: true
+
+        delegate: Item {
+            required property string path
+            required property string fileName
+            required property string technicalLabel
+            required property url thumbnailUrl
+            required property bool isDirectory
+            required property bool isSelected
+            required property int selectionOrdinal
+            width: contactSheet.cellWidth
+            height: contactSheet.cellHeight
+            ThumbnailTile {
+                // A list row is intentionally bounded so the workspace keeps a useful
+                // context-menu target instead of turning the whole viewport into one item.
+                width: root.displayMode === 1 ? Math.min(parent.width - 16, 760)
+                                              : contactSheet.visualCellWidth
+                height: root.displayMode === 1 ? 68 : parent.height - 8
+                displayMode: root.displayMode
+                controller: root.controller
+                path: parent.path
+                fileName: parent.fileName
+                technicalLabel: parent.technicalLabel
+                thumbnailUrl: parent.thumbnailUrl
+                directory: parent.isDirectory
+                selected: parent.isSelected
+                selectionOrdinal: parent.selectionOrdinal
+                onSelectionRequested: function (extend, toggle) {
+                    root.controller.selectPath(path, extend, toggle);
+                }
+                onActivated: root.controller.activatePath(path)
+            }
+        }
+
+        ScrollBar.vertical: ScrollBar {
+            policy: ScrollBar.AsNeeded
+        }
+
+        Text {
+            anchors.centerIn: parent
+            visible: contactSheet.count === 0
+            text: "No supported images in this folder\nChoose another folder or drop images here"
+            horizontalAlignment: Text.AlignHCenter
+            color: Theme.mutedInk
+            font.family: Theme.uiFont
+            font.pixelSize: 13
+            lineHeight: 1.5
+        }
+
+        MouseArea {
+            id: contactSheetMouse
+            anchors.fill: parent
+            acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.BackButton | Qt.ForwardButton
+            propagateComposedEvents: true
+            onClicked: function (mouse) {
+                if (mouse.button === Qt.BackButton) {
+                    root.controller.navigateBack();
+                    return;
+                }
+                if (mouse.button === Qt.ForwardButton) {
+                    root.controller.navigateForward();
+                    return;
+                }
+                const itemIndex = contactSheet.indexAt(mouse.x + contactSheet.contentX,
+                                                       mouse.y + contactSheet.contentY);
+                const listBlank = root.displayMode === 1 && mouse.x > Math.min(contactSheet.width - 16, 760);
+                if ((itemIndex < 0 || listBlank) && mouse.button === Qt.RightButton) {
+                    const point = contactSheet.mapToItem(root, mouse.x, mouse.y);
+                    workspaceContextMenu.popup(point.x, point.y);
+                    return;
+                }
+                if (itemIndex < 0 || listBlank)
+                    root.controller.clearSelection();
+                mouse.accepted = listBlank;
+            }
+        }
+    }
+
+    // Gallery view: a quiet inspection surface with a large fitted preview and
+    // a compact contact strip. It uses the same production thumbnail model.
+    Item {
+        id: galleryWorkspace
+        objectName: "galleryWorkspace"
+        property url currentPreviewUrl: ""
+        property string currentPreviewPath: ""
+        property string currentPreviewName: ""
+        property string currentPreviewTechnicalLabel: ""
+        property string contextPath: ""
+        property bool contextIsDirectory: false
+        property string pixelProbeText: ""
+        property bool actualPixels: false
+        property real manualZoom: 1.0
+        function showPreview(path, previewUrl, fileName, technicalLabel, directory) {
+            if (directory)
+                return;
+            currentPreviewPath = path;
+            currentPreviewUrl = previewUrl;
+            currentPreviewName = fileName;
+            currentPreviewTechnicalLabel = technicalLabel;
+            pixelProbeText = "";
+            actualPixels = false;
+            manualZoom = 1.0;
+            root.controller.setGalleryPath(path);
+        }
+        function showImageMenu(x, y) {
+            if (root.controller.selectionCount === 0)
+                return;
+            if (contextIsDirectory)
+                galleryFolderContextMenu.popup(x, y);
+            else if (root.pathIsRaw(contextPath))
+                galleryRawFileContextMenu.popup(x, y);
+            else
+                galleryFileContextMenu.popup(x, y);
+        }
+        visible: root.displayMode === 2
+        anchors.left: gutter.right
+        anchors.right: parent.right
+        anchors.top: toolbar.bottom
+        anchors.bottom: statusRail.top
+        anchors.margins: 16
+
+        Rectangle {
+            id: galleryPreview
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.right: galleryResizeHandle.left
+            anchors.rightMargin: 4
+            color: "#F1F3F4"
+            radius: 8
+            clip: true
+
+            Rectangle {
+                id: galleryInfoRail
+                objectName: "galleryInfoRail"
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                height: 38
+                color: Theme.paperWhite
+                border.color: Theme.opticalGray
+                border.width: 0
+
+                Text {
+                    objectName: "galleryInfoText"
+                    anchors.left: parent.left
+                    anchors.leftMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.right: galleryZoomLabel.left
+                    anchors.rightMargin: 10
+                    text: root.controller.galleryInfoText.length > 0
+                          ? root.controller.galleryInfoText
+                          : galleryWorkspace.currentPreviewPath.length > 0 ? "Loading image information…"
+                                                                           : "No image selected"
+                    elide: Text.ElideRight
+                    color: Theme.graphiteInk
+                    font.family: Theme.monoFont
+                    font.pixelSize: 10
+                }
+                Text {
+                    id: galleryZoomLabel
+                    anchors.right: galleryControls.left
+                    anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 54
+                    horizontalAlignment: Text.AlignRight
+                    text: {
+                        if (!root.controller.galleryImageReady || root.controller.galleryImageSize.width <= 0)
+                            return "—";
+                        if (galleryWorkspace.actualPixels)
+                            return (galleryWorkspace.manualZoom * 100).toFixed(1) + "%";
+                        const scale = Math.min(galleryImage.paintedWidth / root.controller.galleryImageSize.width,
+                                               galleryImage.paintedHeight / root.controller.galleryImageSize.height);
+                        return (scale * 100).toFixed(1) + "%";
+                    }
+                    color: Theme.mutedInk
+                    font.family: Theme.monoFont
+                    font.pixelSize: 10
+                }
+
+                Row {
+                    id: galleryControls
+                    anchors.right: parent.right
+                    anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 4
+
+                    Button {
+                        id: actualPixelsButton
+                        width: 42
+                        height: 26
+                        text: "1:1"
+                        hoverEnabled: true
+                        onClicked: {
+                            galleryWorkspace.actualPixels = true;
+                            galleryWorkspace.manualZoom = 1.0;
+                            Qt.callLater(function () {
+                                galleryFlick.contentX = Math.max(0, (galleryFlick.contentWidth - galleryFlick.width) / 2);
+                                galleryFlick.contentY = Math.max(0, (galleryFlick.contentHeight - galleryFlick.height) / 2);
+                            });
+                        }
+                        background: Rectangle {
+                            radius: 5
+                            color: actualPixelsButton.down ? "#E2E8EB"
+                                                           : actualPixelsButton.hovered ? Theme.softHover : "transparent"
+                            border.color: galleryWorkspace.actualPixels &&
+                                          Math.abs(galleryWorkspace.manualZoom - 1.0) < 0.001
+                                          ? "#7893A6" : Theme.opticalGray
+                        }
+                        contentItem: Text {
+                            text: actualPixelsButton.text
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            color: Theme.graphiteInk
+                            font.family: Theme.monoFont
+                            font.pixelSize: 10
+                        }
+                    }
+                    Button {
+                        id: fitButton
+                        width: 42
+                        height: 26
+                        text: "Fit"
+                        hoverEnabled: true
+                        onClicked: {
+                            galleryWorkspace.actualPixels = false;
+                            galleryWorkspace.manualZoom = 1.0;
+                            galleryFlick.contentX = 0;
+                            galleryFlick.contentY = 0;
+                        }
+                        background: Rectangle {
+                            radius: 5
+                            color: fitButton.down ? "#E2E8EB"
+                                                  : fitButton.hovered ? Theme.softHover : "transparent"
+                            border.color: !galleryWorkspace.actualPixels ? "#7893A6" : Theme.opticalGray
+                        }
+                        contentItem: Text {
+                            text: fitButton.text
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            color: Theme.graphiteInk
+                            font.family: Theme.uiFont
+                            font.pixelSize: 10
+                        }
+                    }
+                    Button {
+                        id: fullScreenButton
+                        width: 28
+                        height: 26
+                        text: "↗"
+                        hoverEnabled: true
+                        onClicked: {
+                            if (galleryWorkspace.currentPreviewPath.length > 0)
+                                root.controller.activatePath(galleryWorkspace.currentPreviewPath);
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: "Open full screen"
+                        background: Rectangle {
+                            radius: 5
+                            color: fullScreenButton.down ? "#E2E8EB"
+                                                         : fullScreenButton.hovered ? Theme.softHover : "transparent"
+                            border.color: Theme.opticalGray
+                        }
+                        contentItem: Text {
+                            text: fullScreenButton.text
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            color: Theme.graphiteInk
+                            font.family: Theme.uiFont
+                            font.pixelSize: 13
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                id: galleryImageWell
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.bottom: galleryInfoRail.top
+                color: "#F1F3F4"
+                clip: true
+
+                Flickable {
+                    id: galleryFlick
+                    anchors.fill: parent
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+                    contentWidth: galleryWorkspace.actualPixels
+                                  ? Math.max(width, galleryImage.width + 36) : width
+                    contentHeight: galleryWorkspace.actualPixels
+                                   ? Math.max(height, galleryImage.height + 36) : height
+
+                    Image {
+                        id: galleryImage
+                        x: galleryWorkspace.actualPixels
+                           ? Math.max(18, (galleryFlick.width - width) / 2) : 18
+                        y: galleryWorkspace.actualPixels
+                           ? Math.max(18, (galleryFlick.height - height) / 2) : 18
+                        width: galleryWorkspace.actualPixels && root.controller.galleryImageSize.width > 0
+                               ? root.controller.galleryImageSize.width * galleryWorkspace.manualZoom
+                               : Math.max(1, galleryFlick.width - 36)
+                        height: galleryWorkspace.actualPixels && root.controller.galleryImageSize.height > 0
+                                ? root.controller.galleryImageSize.height * galleryWorkspace.manualZoom
+                                : Math.max(1, galleryFlick.height - 36)
+                        source: galleryWorkspace.currentPreviewUrl
+                        // Do not change the requested source size for each wheel step.
+                        // A source reload was the brief white flash seen during zooming.
+                        // Keep a stable, high-quality preview texture through the zoom gesture.
+                        // Asking the provider for the complete sensor frame on every large image
+                        // can allocate an extra 100+ MiB texture and cause a visible blank frame.
+                        sourceSize: Qt.size(2048, 2048)
+                        asynchronous: true
+                        cache: true
+                        retainWhileLoading: true
+                        smooth: true
+                        mipmap: true
+                        fillMode: galleryWorkspace.actualPixels ? Image.Stretch : Image.PreserveAspectFit
+                    }
+
+                    MouseArea {
+                        id: galleryProbeArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.BackButton | Qt.ForwardButton
+                        preventStealing: false
+                        onPositionChanged: function (mouse) {
+                            if (!root.controller.galleryImageReady || galleryImage.paintedWidth <= 0 ||
+                                    galleryImage.paintedHeight <= 0) {
+                                galleryWorkspace.pixelProbeText = "Loading pixel data…";
+                                return;
+                            }
+                            const point = mapToItem(galleryImage, mouse.x, mouse.y);
+                            const left = (galleryImage.width - galleryImage.paintedWidth) / 2;
+                            const top = (galleryImage.height - galleryImage.paintedHeight) / 2;
+                            const sourceSize = root.controller.galleryImageSize;
+                            const px = Math.floor((point.x - left) * sourceSize.width / galleryImage.paintedWidth);
+                            const py = Math.floor((point.y - top) * sourceSize.height / galleryImage.paintedHeight);
+                            const value = root.controller.probeGalleryPixel(px, py);
+                            galleryWorkspace.pixelProbeText = value.length > 0
+                                                             ? value : "Outside image";
+                        }
+                        onExited: galleryWorkspace.pixelProbeText = ""
+                        onWheel: function (wheel) {
+                            if (!root.controller.galleryImageReady)
+                                return;
+                            const sourceSize = root.controller.galleryImageSize;
+                            if (sourceSize.width <= 0 || sourceSize.height <= 0 ||
+                                    galleryImage.paintedWidth <= 0 || galleryImage.paintedHeight <= 0)
+                                return;
+                            // Map through the painted image rather than assuming a fitted image
+                            // starts at (0, 0). This keeps the source pixel below the cursor fixed.
+                            const imagePoint = mapToItem(galleryImage, wheel.x, wheel.y);
+                            const imageLeft = (galleryImage.width - galleryImage.paintedWidth) / 2;
+                            const imageTop = (galleryImage.height - galleryImage.paintedHeight) / 2;
+                            const sourceX = Math.max(0, Math.min(sourceSize.width,
+                                (imagePoint.x - imageLeft) * sourceSize.width / galleryImage.paintedWidth));
+                            const sourceY = Math.max(0, Math.min(sourceSize.height,
+                                (imagePoint.y - imageTop) * sourceSize.height / galleryImage.paintedHeight));
+                            const oldScale = galleryImage.paintedWidth / sourceSize.width;
+                            const factor = Math.pow(1.2, wheel.angleDelta.y / 120.0);
+                            const newScale = Math.max(0.02, Math.min(32.0, oldScale * factor));
+                            const viewportPoint = mapToItem(galleryFlick, wheel.x, wheel.y);
+                            galleryWorkspace.actualPixels = true;
+                            galleryWorkspace.manualZoom = newScale;
+                            Qt.callLater(function () {
+                                galleryFlick.contentX = Math.max(0, Math.min(galleryFlick.contentWidth - galleryFlick.width,
+                                    galleryImage.x + sourceX * newScale - viewportPoint.x));
+                                galleryFlick.contentY = Math.max(0, Math.min(galleryFlick.contentHeight - galleryFlick.height,
+                                    galleryImage.y + sourceY * newScale - viewportPoint.y));
+                            });
+                            wheel.accepted = true;
+                        }
+                        onClicked: function (mouse) {
+                            if (mouse.button === Qt.BackButton) {
+                                root.controller.navigateBack();
+                                return;
+                            }
+                            if (mouse.button === Qt.ForwardButton) {
+                                root.controller.navigateForward();
+                                return;
+                            }
+                            if (mouse.button === Qt.RightButton) {
+                                if (root.controller.selectedPaths.indexOf(galleryWorkspace.currentPreviewPath) < 0)
+                                    root.controller.selectPath(galleryWorkspace.currentPreviewPath);
+                                galleryWorkspace.contextPath = galleryWorkspace.currentPreviewPath;
+                                galleryWorkspace.contextIsDirectory = false;
+                                const point = mapToItem(root, mouse.x, mouse.y);
+                                galleryWorkspace.showImageMenu(point.x, point.y);
+                            } else if (galleryWorkspace.currentPreviewPath.length > 0) {
+                                root.controller.selectPath(galleryWorkspace.currentPreviewPath);
+                            }
+                        }
+                        onDoubleClicked: {
+                            if (galleryWorkspace.currentPreviewPath.length > 0)
+                                root.controller.activatePath(galleryWorkspace.currentPreviewPath);
+                        }
+                    }
+                }
+            }
+        }
+
+        Item {
+            id: galleryResizeHandle
+            objectName: "galleryResizeHandle"
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            x: galleryStripPanel.x - width / 2
+            width: 12
+            z: 30
+
+            Rectangle {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: 1
+                color: galleryResizeMouse.containsMouse || galleryResizeMouse.pressed
+                       ? "#7893A6" : Theme.opticalGray
+            }
+            MouseArea {
+                id: galleryResizeMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.SizeHorCursor
+                property real lastRootX: 0
+                onPressed: function (mouse) {
+                    lastRootX = mapToItem(root, mouse.x, mouse.y).x;
+                }
+                onPositionChanged: function (mouse) {
+                    if (!pressed)
+                        return;
+                    const currentRootX = mapToItem(root, mouse.x, mouse.y).x;
+                    const maximumWidth = Math.max(240, galleryWorkspace.width - 420);
+                    root.galleryStripWidth = Math.max(220, Math.min(maximumWidth,
+                                                                     root.galleryStripWidth - (currentRootX - lastRootX)));
+                    lastRootX = currentRootX;
+                }
+            }
+        }
+
+        Rectangle {
+            id: galleryStripPanel
+            objectName: "galleryStripPanel"
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: Math.max(220, Math.min(root.galleryStripWidth, galleryWorkspace.width - 420))
+            color: Theme.paperWhite
+            radius: 8
+            border.color: Theme.opticalGray
+            border.width: 1
+
+            GridView {
+                id: galleryStrip
+                objectName: "galleryStrip"
+                anchors.fill: parent
+                anchors.margins: 8
+                // Reserve a real workspace footer so users always have a dependable
+                // blank target for the workspace context menu.
+                anchors.bottomMargin: 60
+                clip: true
+                model: root.controller.thumbnails
+                currentIndex: 0
+                // Keep the contact cards at one optical size. GridView wraps them into
+                // more/fewer columns when the divider moves instead of stretching them.
+                cellWidth: 132
+                cellHeight: 116
+                boundsBehavior: Flickable.StopAtBounds
+                reuseItems: true
+
+                delegate: Item {
+                    id: galleryDelegate
+                    required property int index
+                    required property string path
+                    required property string fileName
+                    required property string technicalLabel
+                    required property url thumbnailUrl
+                    required property bool isDirectory
+                    required property bool isSelected
+
+                    property url previewUrl: thumbnailUrl
+                    property string previewName: fileName
+                    property string previewTechnicalLabel: technicalLabel
+
+                    Drag.active: galleryDragHandler.active && galleryDelegate.isSelected
+                    Drag.dragType: Drag.Automatic
+                    Drag.supportedActions: Qt.CopyAction
+                    Drag.mimeData: ({ "text/uri-list": root.controller.selectedUriList })
+                    Drag.imageSource: galleryDelegate.thumbnailUrl
+                    Drag.hotSpot.x: galleryDelegate.width / 2
+                    Drag.hotSpot.y: Math.min(galleryDelegate.height / 2, 52)
+
+                    onTechnicalLabelChanged: {
+                        if (galleryWorkspace.currentPreviewPath === galleryDelegate.path)
+                            galleryWorkspace.currentPreviewTechnicalLabel = technicalLabel;
+                    }
+
+                    Component.onCompleted: {
+                        if (galleryDelegate.index === 0 && galleryWorkspace.currentPreviewUrl.toString().length === 0) {
+                            galleryWorkspace.showPreview(galleryDelegate.path, galleryDelegate.thumbnailUrl,
+                                                         galleryDelegate.fileName,
+                                                         galleryDelegate.technicalLabel,
+                                                         galleryDelegate.isDirectory);
+                        }
+                    }
+
+                    width: galleryStrip.cellWidth
+                    height: galleryStrip.cellHeight
+
+                    Rectangle {
+                        id: galleryCard
+                        objectName: "galleryCard-" + galleryDelegate.index
+                        anchors.fill: parent
+                        anchors.margins: 4
+                        radius: 6
+                        color: galleryMouse.containsMouse ? "#F1F5F7" : "transparent"
+                        border.color: galleryDelegate.GridView.isCurrentItem ? "#6C8799" : galleryDelegate.isSelected ? "#B7C6D0" : "transparent"
+                        border.width: galleryDelegate.GridView.isCurrentItem ? 2 : 1
+
+                        Image {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.margins: 5
+                            height: 72
+                            source: galleryDelegate.thumbnailUrl
+                            sourceSize: Qt.size(320, 240)
+                            asynchronous: true
+                            cache: true
+                            fillMode: galleryDelegate.isDirectory ? Image.PreserveAspectFit : Image.PreserveAspectCrop
+                        }
+                        Text {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            anchors.leftMargin: 6
+                            anchors.rightMargin: 6
+                            anchors.bottomMargin: 7
+                            text: galleryDelegate.fileName
+                            elide: Text.ElideMiddle
+                            color: Theme.graphiteInk
+                            font.family: Theme.uiFont
+                            font.pixelSize: 10
+                        }
+                        MouseArea {
+                            id: galleryMouse
+                            objectName: "galleryMouse-" + galleryDelegate.index
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.BackButton | Qt.ForwardButton
+                            onClicked: function (mouse) {
+                                if (mouse.button === Qt.BackButton) {
+                                    root.controller.navigateBack();
+                                    return;
+                                }
+                                if (mouse.button === Qt.ForwardButton) {
+                                    root.controller.navigateForward();
+                                    return;
+                                }
+                                galleryStrip.currentIndex = galleryDelegate.index;
+                                galleryWorkspace.showPreview(galleryDelegate.path,
+                                                             galleryDelegate.thumbnailUrl,
+                                                             galleryDelegate.fileName,
+                                                             galleryDelegate.technicalLabel,
+                                                             galleryDelegate.isDirectory);
+                                if (mouse.button === Qt.RightButton) {
+                                    if (!galleryDelegate.isSelected)
+                                        root.controller.selectPath(galleryDelegate.path);
+                                    galleryWorkspace.contextPath = galleryDelegate.path;
+                                    galleryWorkspace.contextIsDirectory = galleryDelegate.isDirectory;
+                                    const point = mapToItem(root, mouse.x, mouse.y);
+                                    galleryWorkspace.showImageMenu(point.x, point.y);
+                                    return;
+                                }
+                                const toggle = (mouse.modifiers & Qt.ControlModifier) || (mouse.modifiers & Qt.MetaModifier);
+                                const extend = (mouse.modifiers & Qt.ShiftModifier);
+                                root.controller.selectPath(galleryDelegate.path, extend, toggle);
+                            }
+                            onDoubleClicked: root.controller.activatePath(galleryDelegate.path)
+                        }
+                        DragHandler {
+                            id: galleryDragHandler
+                            acceptedButtons: Qt.LeftButton
+                            target: null
+                            onActiveChanged: {
+                                if (active && !galleryDelegate.isSelected)
+                                    root.controller.selectPath(galleryDelegate.path);
+                            }
+                        }
+                    }
+                }
+
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AsNeeded
+                }
+            }
+
+            MouseArea {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.margins: 8
+                height: 44
+                acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.BackButton | Qt.ForwardButton
+                onClicked: function (mouse) {
+                    if (mouse.button === Qt.BackButton) {
+                        root.controller.navigateBack();
+                        return;
+                    }
+                    if (mouse.button === Qt.ForwardButton) {
+                        root.controller.navigateForward();
+                        return;
+                    }
+                    if (mouse.button === Qt.RightButton) {
+                        const point = mapToItem(root, mouse.x, mouse.y);
+                        workspaceContextMenu.popup(point.x, point.y);
+                    } else {
+                        root.controller.clearSelection();
+                    }
+                }
+            }
+        }
+    }
+
+    // One window-wide external drop target preserves the original behavior in every view mode,
+    // including the large gallery preview. Internal thumbnail drags are intentionally ignored.
+    DropArea {
+        id: workspaceDropArea
+        property bool externalDragActive: false
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: toolbar.bottom
+        anchors.bottom: statusRail.top
+        z: 80
+        onEntered: function (drag) {
+            externalDragActive = drag.source === null && drag.hasUrls;
+            if (externalDragActive)
+                drag.acceptProposedAction();
+        }
+        onExited: externalDragActive = false
+        onDropped: function (drop) {
+            if (drop.source === null && drop.hasUrls) {
+                root.controller.copyDroppedUrls(drop.urls);
+                drop.acceptProposedAction();
+            }
+            externalDragActive = false;
+        }
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 8
+            visible: workspaceDropArea.externalDragActive
+            color: "#0A7893A6"
+            border.color: "#7893A6"
+            border.width: 1
+            radius: 8
+        }
+    }
+
+    Rectangle {
+        id: statusRail
+        objectName: "statusRail"
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: 32
+        color: Theme.paperWhite
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: 1
+            color: Theme.opticalGray
+        }
+        Text {
+            anchors.left: parent.left
+            anchors.leftMargin: 12
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.displayMode === 2 && galleryWorkspace.pixelProbeText.length > 0
+                  ? galleryWorkspace.pixelProbeText : root.controller.statusText
+            color: Theme.mutedInk
+            font.family: Theme.monoFont
+            font.pixelSize: 11
+        }
+    }
+
+    AppMenu {
+        id: workspaceContextMenu
+        objectName: "workspaceContextMenu"
+        AppMenuItem {
+            text: Qt.platform.os === "osx" ? "Open in Finder" : "Open in File Explorer"
+            onTriggered: root.controller.openCurrentDirectoryInFileManager()
+        }
+        AppMenuSeparator {}
+        AppMenuItem {
+            text: "Refresh"
+            shortcutText: Qt.platform.os === "osx" ? "⌘R" : "Ctrl+R"
+            onTriggered: root.controller.refresh()
+        }
+        AppMenuItem {
+            text: "Select all"
+            shortcutText: Qt.platform.os === "osx" ? "⌘A" : "Ctrl+A"
+            onTriggered: root.controller.selectAll()
+        }
+        AppMenuItem {
+            text: "Paste"
+            shortcutText: Qt.platform.os === "osx" ? "⌘V" : "Ctrl+V"
+            enabled: root.controller.canPaste
+            onTriggered: root.controller.pasteItems()
+        }
+        AppMenuSeparator {}
+        AppMenuItem {
+            text: "New folder…"
+            shortcutText: Qt.platform.os === "osx" ? "⇧⌘N" : "Ctrl+Shift+N"
+            onTriggered: newFolderDialog.open()
+        }
+        AppMenuSeparator {}
+        AppMenu {
+            title: "Sort by"
+            AppMenuItem {
+                objectName: "sortByNameAction"
+                text: (root.controller.sortMode === 0 ? "✓  " : "    ") + "Name"
+                onTriggered: root.controller.setSortMode(0)
+            }
+            AppMenuItem {
+                objectName: "sortByTypeAction"
+                text: (root.controller.sortMode === 3 ? "✓  " : "    ") + "Type"
+                onTriggered: root.controller.setSortMode(3)
+            }
+            AppMenuItem {
+                objectName: "sortBySizeAction"
+                text: (root.controller.sortMode === 2 ? "✓  " : "    ") + "Size"
+                onTriggered: root.controller.setSortMode(2)
+            }
+            AppMenuItem {
+                objectName: "sortByModifiedAction"
+                text: (root.controller.sortMode === 1 ? "✓  " : "    ") + "Date modified"
+                onTriggered: root.controller.setSortMode(1)
+            }
+        }
+    }
+
+    AppMenu {
+        id: galleryFileContextMenu
+        objectName: "galleryFileContextMenu"
+        AppMenuItem {
+            text: "Open full screen"
+            onTriggered: root.controller.activatePath(galleryWorkspace.contextPath)
+        }
+        AppMenuItem {
+            text: "Compare selected"
+            enabled: root.controller.canCompare
+            onTriggered: root.controller.compareSelected()
+        }
+        AppMenuSeparator {}
+        AppMenuItem {
+            text: "Cut"
+            shortcutText: Qt.platform.os === "osx" ? "⌘X" : "Ctrl+X"
+            onTriggered: root.controller.copySelected(true)
+        }
+        AppMenuItem {
+            text: "Copy"
+            shortcutText: Qt.platform.os === "osx" ? "⌘C" : "Ctrl+C"
+            onTriggered: root.controller.copySelected(false)
+        }
+        AppMenuItem {
+            text: "Rename…"
+            enabled: root.controller.selectionCount === 1
+            onTriggered: root.controller.renameSelected()
+        }
+        AppMenuItem {
+            text: "Move to Trash"
+            destructive: true
+            onTriggered: root.controller.moveSelectedToTrash()
+        }
+        AppMenuSeparator {}
+        AppMenuItem {
+            text: "Reveal in Finder / Explorer"
+            enabled: root.controller.selectionCount === 1
+            onTriggered: root.controller.revealSelected()
+        }
+        AppMenuItem {
+            text: "Properties"
+            enabled: root.controller.selectionCount === 1
+            onTriggered: root.controller.showSelectedProperties()
+        }
+    }
+
+    AppMenu {
+        id: galleryRawFileContextMenu
+        objectName: "galleryRawFileContextMenu"
+        AppMenuItem { text: "Open full screen"; onTriggered: root.controller.activatePath(galleryWorkspace.contextPath) }
+        AppMenuItem { text: "Compare selected"; enabled: root.controller.canCompare; onTriggered: root.controller.compareSelected() }
+        AppMenuItem { text: "RAW/YUV parameters…"; enabled: root.controller.canEditRaw; onTriggered: root.controller.editSelectedRawParameters() }
+        AppMenuSeparator {}
+        AppMenuItem { text: "Cut"; shortcutText: Qt.platform.os === "osx" ? "⌘X" : "Ctrl+X"; onTriggered: root.controller.copySelected(true) }
+        AppMenuItem { text: "Copy"; shortcutText: Qt.platform.os === "osx" ? "⌘C" : "Ctrl+C"; onTriggered: root.controller.copySelected(false) }
+        AppMenuItem { text: "Rename…"; enabled: root.controller.selectionCount === 1; onTriggered: root.controller.renameSelected() }
+        AppMenuItem { text: "Move to Trash"; destructive: true; onTriggered: root.controller.moveSelectedToTrash() }
+        AppMenuSeparator {}
+        AppMenuItem { text: "Reveal in Finder / Explorer"; enabled: root.controller.selectionCount === 1; onTriggered: root.controller.revealSelected() }
+        AppMenuItem { text: "Properties"; enabled: root.controller.selectionCount === 1; onTriggered: root.controller.showSelectedProperties() }
+    }
+
+    // Separate folder/file menus avoid invisible menu rows reserving vertical space.
+    AppMenu {
+        id: galleryFolderContextMenu
+        objectName: "galleryFolderContextMenu"
+        AppMenuItem {
+            text: "Open folder"
+            onTriggered: root.controller.activatePath(galleryWorkspace.contextPath)
+        }
+        AppMenuItem {
+            text: "Paste into folder"
+            enabled: root.controller.canPaste
+            onTriggered: root.controller.pasteItemsInto(galleryWorkspace.contextPath)
+        }
+        AppMenuSeparator {}
+        AppMenuItem {
+            text: "Cut"
+            shortcutText: Qt.platform.os === "osx" ? "⌘X" : "Ctrl+X"
+            onTriggered: root.controller.copySelected(true)
+        }
+        AppMenuItem {
+            text: "Copy"
+            shortcutText: Qt.platform.os === "osx" ? "⌘C" : "Ctrl+C"
+            onTriggered: root.controller.copySelected(false)
+        }
+        AppMenuItem {
+            text: "Rename…"
+            enabled: root.controller.selectionCount === 1
+            onTriggered: root.controller.renameSelected()
+        }
+        AppMenuItem {
+            text: "Move to Trash"
+            destructive: true
+            onTriggered: root.controller.moveSelectedToTrash()
+        }
+        AppMenuSeparator {}
+        AppMenuItem {
+            text: "Reveal in Finder / Explorer"
+            enabled: root.controller.selectionCount === 1
+            onTriggered: root.controller.revealSelected()
+        }
+        AppMenuItem {
+            text: "Properties"
+            enabled: root.controller.selectionCount === 1
+            onTriggered: root.controller.showSelectedProperties()
+        }
+    }
+
+    Dialog {
+        id: newFolderDialog
+        objectName: "newFolderDialog"
+        modal: true
+        focus: true
+        width: 360
+        height: 222
+        x: Math.round((root.width - width) / 2)
+        y: Math.round((root.height - height) / 2)
+        padding: 0
+        closePolicy: Popup.CloseOnEscape
+
+        onOpened: {
+            folderNameField.text = "New folder";
+            folderError.text = "";
+            folderNameField.forceActiveFocus();
+            folderNameField.selectAll();
+        }
+
+        Overlay.modal: Rectangle {
+            color: "#330E1820"
+        }
+
+        background: Rectangle {
+            color: "#FCFDFC"
+            radius: 10
+            border.color: "#D7DEE3"
+            border.width: 1
+        }
+
+        contentItem: Item {
+            Text {
+                x: 22
+                y: 20
+                text: "New folder"
+                color: "#2E3A43"
+                font.family: Theme.uiFont
+                font.pixelSize: 17
+                font.weight: Font.DemiBold
+            }
+            Text {
+                x: 22
+                y: 51
+                text: "Create a folder in " + root.controller.currentFolderName
+                color: Theme.mutedInk
+                font.family: Theme.uiFont
+                font.pixelSize: 12
+            }
+            TextField {
+                id: folderNameField
+                x: 22
+                y: 79
+                width: parent.width - 44
+                height: 38
+                leftPadding: 11
+                rightPadding: 11
+                selectByMouse: true
+                color: Theme.graphiteInk
+                font.family: Theme.uiFont
+                font.pixelSize: 13
+                onAccepted: createFolderButton.clicked()
+                background: Rectangle {
+                    color: "#FFFFFF"
+                    radius: 6
+                    border.color: folderNameField.activeFocus ? "#7893A6" : "#D7DEE3"
+                    border.width: folderNameField.activeFocus ? 2 : 1
+                }
+            }
+            Text {
+                id: folderError
+                x: 22
+                y: 124
+                width: parent.width - 44
+                color: Theme.danger
+                font.family: Theme.uiFont
+                font.pixelSize: 11
+                elide: Text.ElideRight
+            }
+            Button {
+                id: cancelFolderButton
+                x: parent.width - 194
+                y: 166
+                width: 76
+                height: 34
+                text: "Cancel"
+                onClicked: newFolderDialog.close()
+                contentItem: Text {
+                    text: cancelFolderButton.text
+                    color: Theme.graphiteInk
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    font.family: Theme.uiFont
+                    font.pixelSize: 13
+                }
+                background: Rectangle {
+                    radius: 6
+                    color: cancelFolderButton.down ? "#E2E9ED" : cancelFolderButton.hovered ? "#F1F5F7" : "#FFFFFF"
+                    border.color: "#D7DEE3"
+                    border.width: 1
+                }
+            }
+            Button {
+                id: createFolderButton
+                x: parent.width - 110
+                y: 166
+                width: 88
+                height: 34
+                text: "Create"
+                enabled: folderNameField.text.trim().length > 0
+                onClicked: {
+                    const error = root.controller.createFolder(folderNameField.text);
+                    if (error.length === 0)
+                        newFolderDialog.close();
+                    else
+                        folderError.text = error;
+                }
+                contentItem: Text {
+                    text: createFolderButton.text
+                    color: createFolderButton.enabled ? "#FFFFFF" : "#A9B2B8"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    font.family: Theme.uiFont
+                    font.pixelSize: 13
+                    font.weight: Font.DemiBold
+                }
+                background: Rectangle {
+                    radius: 6
+                    color: !createFolderButton.enabled ? "#E7EBEE" : createFolderButton.down ? "#49677A" : createFolderButton.hovered ? "#607E92" : "#526F82"
+                }
+            }
+        }
+    }
+
+    Shortcut {
+        sequence: StandardKey.Open
+        onActivated: root.controller.chooseDirectory()
+    }
+    Shortcut {
+        sequences: [StandardKey.Find]
+        onActivated: {
+            toolbar.searchControl.forceActiveFocus();
+            toolbar.searchControl.selectAll();
+        }
+    }
+    Shortcut {
+        sequences: [StandardKey.Copy]
+        enabled: root.fileShortcutsEnabled
+        onActivated: root.controller.copySelected(false)
+    }
+    Shortcut {
+        sequences: [StandardKey.Cut]
+        enabled: root.fileShortcutsEnabled
+        onActivated: root.controller.copySelected(true)
+    }
+    Shortcut {
+        sequences: [StandardKey.Paste]
+        enabled: root.fileShortcutsEnabled
+        onActivated: root.controller.pasteItems()
+    }
+    Shortcut {
+        sequence: "Ctrl+B"
+        onActivated: root.navigatorVisible = !root.navigatorVisible
+    }
+    Shortcut {
+        sequence: "Meta+B"
+        onActivated: root.navigatorVisible = !root.navigatorVisible
+    }
+    Shortcut {
+        sequence: "F2"
+        enabled: root.fileShortcutsEnabled
+        onActivated: root.controller.renameSelected()
+    }
+    Shortcut {
+        sequence: "C"
+        enabled: root.fileShortcutsEnabled && root.controller.canCompare
+        onActivated: root.controller.compareSelected()
+    }
+    Shortcut {
+        sequence: "Delete"
+        enabled: root.fileShortcutsEnabled && root.controller.selectionCount > 0
+        onActivated: root.controller.moveSelectedToTrash()
+    }
+    Shortcut {
+        sequences: [StandardKey.SelectAll]
+        enabled: root.fileShortcutsEnabled
+        onActivated: root.controller.selectAll()
+    }
+    Shortcut {
+        sequence: "Ctrl+Shift+N"
+        enabled: root.fileShortcutsEnabled
+        onActivated: newFolderDialog.open()
+    }
+    Shortcut {
+        sequences: [StandardKey.Back]
+        enabled: root.fileShortcutsEnabled && root.controller.canGoBack
+        onActivated: root.controller.navigateBack()
+    }
+    Shortcut {
+        sequences: [StandardKey.Forward]
+        enabled: root.fileShortcutsEnabled && root.controller.canGoForward
+        onActivated: root.controller.navigateForward()
+    }
+    Shortcut {
+        sequence: "Alt+Up"
+        enabled: root.fileShortcutsEnabled && root.controller.canGoUp
+        onActivated: root.controller.navigateUp()
+    }
+    Shortcut {
+        sequence: "Alt+Return"
+        enabled: root.fileShortcutsEnabled && root.controller.selectionCount === 1
+        onActivated: root.controller.showSelectedProperties()
+    }
+    Shortcut {
+        sequences: [StandardKey.Refresh]
+        enabled: root.fileShortcutsEnabled
+        onActivated: root.controller.refresh()
+    }
+    Shortcut {
+        sequence: "Return"
+        enabled: root.fileShortcutsEnabled && root.controller.selectionCount === 1
+        onActivated: root.controller.activatePath(root.controller.selectedPaths[0])
+    }
+    Shortcut {
+        sequence: "Backspace"
+        enabled: Qt.platform.os === "osx" && root.fileShortcutsEnabled &&
+                 root.controller.selectionCount > 0
+        onActivated: root.controller.moveSelectedToTrash()
+    }
+}

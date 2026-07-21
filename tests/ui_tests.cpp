@@ -2281,24 +2281,29 @@ void UiTests::fullScreenUsesEdgePanelsContextActionsAndNoTimeline() {
     auto* reveal = window.findChild<QAction*>(QStringLiteral("fullScreenRevealAction"));
     auto* showInformation =
         window.findChild<QAction*>(QStringLiteral("fullScreenShowInformationAction"));
-    auto* showHistogram =
-        window.findChild<QAction*>(QStringLiteral("fullScreenShowHistogramAction"));
     auto* canvas = window.findChild<ImageCanvas*>();
-    QVERIFY(top && left && right && bottom && properties && information && basic && histogram &&
-            rawTable && contextMenu && reveal && showInformation && showHistogram && canvas);
-    QVERIFY(
-        right->styleSheet().contains(QStringLiteral("background-color: rgba(255,255,255,246)")));
-    QVERIFY(right->styleSheet().contains(QStringLiteral("color: #202124")));
-    QVERIFY(!right->styleSheet().contains(QStringLiteral("rgba(20, 20, 22, 225)")));
-    QCOMPARE(showInformation->text(), QStringLiteral("Show Properties"));
+    QVERIFY(top && !left && right && bottom && properties && information && basic && histogram &&
+            rawTable && contextMenu && reveal && showInformation && canvas);
+    QVERIFY(right->styleSheet().contains(QStringLiteral("background: #F7F9FA")));
+    QVERIFY(right->styleSheet().contains(QStringLiteral("#D7DEE3")));
+    QCOMPARE(showInformation->text(), QStringLiteral("Properties"));
     QVERIFY(!window.findChild<QWidget*>(QStringLiteral("fullScreenFrameControls")));
     QVERIFY(!window.findChild<QSlider*>(QStringLiteral("fullScreenFrameSlider")));
     QVERIFY(!window.findChild<QSpinBox*>(QStringLiteral("fullScreenFrameSpin")));
     QVERIFY(!window.findChild<QAction*>(QStringLiteral("fullScreenPlayFrames")));
     QCOMPARE(canvas->contextMenuPolicy(), Qt::CustomContextMenu);
-    QCOMPARE(contextMenu->actions().size(), 4);
+    const auto hasContextAction = [contextMenu](const QString& text) {
+        return std::any_of(contextMenu->actions().cbegin(), contextMenu->actions().cend(),
+                           [&text](QAction* action) { return action && action->text() == text; });
+    };
+    QVERIFY(hasContextAction(QStringLiteral("Cut")));
+    QVERIFY(hasContextAction(QStringLiteral("Copy")));
+    QVERIFY(hasContextAction(QStringLiteral("Rename…")));
+    QVERIFY(hasContextAction(QStringLiteral("Move to Trash")));
+    QVERIFY(hasContextAction(QStringLiteral("Reveal in Finder / Explorer")));
+    QVERIFY(hasContextAction(QStringLiteral("Display")));
+    QVERIFY(hasContextAction(QStringLiteral("Properties")));
     QVERIFY(top->isHidden());
-    QVERIFY(left->isHidden());
     QVERIFY(right->isHidden());
     QVERIFY(bottom->isHidden());
 
@@ -2315,30 +2320,19 @@ void UiTests::fullScreenUsesEdgePanelsContextActionsAndNoTimeline() {
     };
     moveTo(QPointF(canvas->width() / 2.0, 1.0));
     QVERIFY(!top->isHidden());
-    moveTo(QPointF(1.0, canvas->height() / 2.0));
-    QVERIFY(!left->isHidden());
     moveTo(QPointF(canvas->width() / 2.0, canvas->height() - 1.0));
     QVERIFY(!bottom->isHidden());
     moveTo(QPointF(canvas->width() - 1.0, canvas->height() / 2.0));
     QVERIFY(!right->isHidden());
     QCOMPARE(properties->tabs()->currentWidget(), static_cast<QWidget*>(information));
 
-    showHistogram->trigger();
-    QVERIFY(showHistogram->isChecked());
-    QVERIFY(!showInformation->isChecked());
-    QVERIFY(!right->isHidden());
-    QCOMPARE(properties->tabs()->currentWidget(), static_cast<QWidget*>(histogram));
     moveTo(QPointF(canvas->width() / 2.0, canvas->height() / 2.0));
-    QTest::qWait(1100);
-    QVERIFY(!right->isHidden());
-
-    showInformation->trigger();
-    QVERIFY(showInformation->isChecked());
-    QVERIFY(!showHistogram->isChecked());
-    QCOMPARE(properties->tabs()->currentWidget(), static_cast<QWidget*>(information));
-    showInformation->trigger();
-    QVERIFY(!showInformation->isChecked());
+    QTest::qWait(900);
     QVERIFY(right->isHidden());
+    // The bottom pixel rail intentionally stays around much longer than the side inspector.
+    QVERIFY(!bottom->isHidden());
+    showInformation->trigger();
+    QCOMPARE(properties->tabs()->currentWidget(), static_cast<QWidget*>(information));
 
     QTest::keyClick(&window, Qt::Key_BracketRight);
     QTest::keyClick(&window, Qt::Key_P);

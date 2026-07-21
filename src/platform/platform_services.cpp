@@ -20,4 +20,10 @@ bool PlatformServices::revealInFileManager(const QString& path) {
 #endif
 }
 
+bool PlatformServices::openDirectoryInFileManager(const QString& path) {
+    const QFileInfo info(path);
+    const QString directory = info.isDir() ? info.absoluteFilePath() : info.absolutePath();
+    return !directory.isEmpty() && QDesktopServices::openUrl(QUrl::fromLocalFile(directory));
+}
+
 } // namespace ispview

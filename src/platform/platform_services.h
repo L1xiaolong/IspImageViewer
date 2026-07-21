@@ -9,6 +9,7 @@ namespace ispview {
 class PlatformServices final {
   public:
     [[nodiscard]] static bool revealInFileManager(const QString& path);
+    [[nodiscard]] static bool openDirectoryInFileManager(const QString& path);
 };
 
 } // namespace ispview

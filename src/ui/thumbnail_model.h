@@ -22,7 +22,12 @@ class ThumbnailModel final : public QAbstractListModel {
         ModifiedRole,
         DirectoryRole,
         TypeRole,
-        DimensionsRole
+        DimensionsRole,
+        ThumbnailUrlRole,
+        FileNameRole,
+        TechnicalLabelRole,
+        SelectedRole,
+        SelectionOrdinalRole
     };
 
     explicit ThumbnailModel(ImageLoader* loader, QObject* parent = nullptr);
@@ -38,6 +43,7 @@ class ThumbnailModel final : public QAbstractListModel {
     void setFiles(QVector<ImageFileRecord> files);
     void updateFiles(const QVector<ImageFileRecord>& files);
     void invalidateThumbnail(const QString& path);
+    void setSelectedPaths(const QStringList& paths);
     [[nodiscard]] QString pathAt(int row) const;
     [[nodiscard]] const QVector<ImageFileRecord>& files() const { return files_; }
 
@@ -52,6 +58,7 @@ class ThumbnailModel final : public QAbstractListModel {
     mutable QHash<QString, QSize> dimensions_;
     mutable QSet<QString> pending_;
     mutable QHash<QString, quint64> pendingRequestIds_;
+    QStringList selectedPaths_;
     mutable quint64 requestCounter_ = 0;
     QPixmap placeholder_;
     QPixmap unavailablePlaceholder_;

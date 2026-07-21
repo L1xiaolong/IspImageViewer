@@ -1,0 +1,40 @@
+import QtQuick
+import QtQuick.Controls
+import "."
+
+MenuItem {
+    id: control
+    property string shortcutText: ""
+    property bool destructive: false
+
+    implicitHeight: 32
+    leftPadding: 10
+    rightPadding: 10
+    topPadding: 0
+    bottomPadding: 0
+
+    contentItem: Item {
+        Text {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            text: control.text
+            color: !control.enabled ? "#A9B2B8" : control.destructive ? "#B84A4A" : "#33414B"
+            font.family: Theme.uiFont
+            font.pixelSize: 13
+        }
+        Text {
+            visible: control.shortcutText.length > 0
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            text: control.shortcutText
+            color: "#8A969E"
+            font.family: Theme.uiFont
+            font.pixelSize: 11
+        }
+    }
+
+    background: Rectangle {
+        radius: 5
+        color: control.highlighted && control.enabled ? "#EAF0F4" : "transparent"
+    }
+}

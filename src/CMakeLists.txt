@@ -3,6 +3,7 @@ add_subdirectory(io)
 add_subdirectory(render)
 add_subdirectory(platform)
 add_subdirectory(ui)
+add_subdirectory(qml)
 
 qt_add_executable(ISPImageViewer
     app/main.cpp
