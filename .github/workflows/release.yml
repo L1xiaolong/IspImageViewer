@@ -44,7 +44,10 @@ jobs:
         if: runner.os == 'macOS'
         with:
           version: '6.9.0'
-          modules: 'qtshadertools qtquickcontrols2 qtsvg'
+          # Qt Quick Controls belongs to the qtdeclarative archive; qtsvg is
+          # likewise an archive, rather than an install-qt add-on module.
+          modules: 'qtshadertools'
+          archives: 'qtbase qtdeclarative qtsvg'
           cache: true
 
       - name: Set up MSYS2/UCRT64
