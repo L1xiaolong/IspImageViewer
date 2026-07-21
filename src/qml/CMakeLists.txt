@@ -5,6 +5,8 @@ qt_add_executable(ISPImageViewerQml
     main.cpp
     browse_controller.h
     browse_controller.cpp
+    browse_workspace_controller.h
+    browse_workspace_controller.cpp
     thumbnail_image_provider.h
     thumbnail_image_provider.cpp
     qml_image_canvas.h
@@ -23,6 +25,7 @@ qt_add_qml_module(ISPImageViewerQml
         Isp/AppMenu.qml
         Isp/AppMenuItem.qml
         Isp/AppMenuSeparator.qml
+        Isp/BrowserPane.qml
         Isp/FolderNavigator.qml
         Isp/HistogramPanel.qml
         Isp/TopToolbar.ui.qml
@@ -38,7 +41,10 @@ set(_ispview_qml_icons
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/folder.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/folder-open.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/folder-plus.svg
+    ${PROJECT_SOURCE_DIR}/assets/icons/ui/folder-pane-plus.svg
+    ${PROJECT_SOURCE_DIR}/assets/icons/ui/close.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/search.svg
+    ${PROJECT_SOURCE_DIR}/assets/icons/ui/sort.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/copy.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/cut.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/paste.svg

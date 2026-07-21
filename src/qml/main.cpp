@@ -1,5 +1,6 @@
 #include "io/default_image_decoder.h"
 #include "qml/browse_controller.h"
+#include "qml/browse_workspace_controller.h"
 #include "qml/compare_controller.h"
 #include "qml/thumbnail_image_provider.h"
 
@@ -27,6 +28,7 @@ int main(int argc, char* argv[]) {
     QString selectedPath;
     QStringList initialComparePaths;
     QString displayMode;
+    int initialFileManagerCount = 1;
     bool nativeScreenshot = false;
     int screenshotDelay = 1800;
     const QStringList arguments = app.arguments();
@@ -43,6 +45,9 @@ int main(int argc, char* argv[]) {
         } else if (arguments.at(i) == QStringLiteral("--screenshot-delay") &&
                    i + 1 < arguments.size()) {
             screenshotDelay = qMax(250, arguments.at(++i).toInt());
+        } else if (arguments.at(i) == QStringLiteral("--file-managers") &&
+                   i + 1 < arguments.size()) {
+            initialFileManagerCount = qBound(0, arguments.at(++i).toInt(), 4);
         } else if (arguments.at(i) == QStringLiteral("--qml-compare")) {
             while (i + 1 < arguments.size() && !arguments.at(i + 1).startsWith(QLatin1Char('-'))) {
                 initialComparePaths.append(QFileInfo(arguments.at(++i)).absoluteFilePath());
@@ -59,7 +64,13 @@ int main(int argc, char* argv[]) {
     }
 
     const auto decoder = ispview::createDefaultImageDecoder();
-    ispview::BrowseController browseController(decoder, initialDirectory);
+    ispview::BrowseWorkspaceController browseController(decoder, initialDirectory);
+    if (initialFileManagerCount == 0) {
+        browseController.closePane(0);
+    } else {
+        while (browseController.paneCount() < initialFileManagerCount)
+            browseController.addFileManagerPane();
+    }
     ispview::CompareController compareController(browseController.loader());
 
     QQmlApplicationEngine engine;
@@ -86,7 +97,8 @@ int main(int argc, char* argv[]) {
     if (!selectedPath.isEmpty()) {
         QTimer::singleShot(700, &browseController,
                            [&browseController, selectedPath] {
-                               browseController.selectPath(selectedPath);
+                               if (auto* pane = browseController.activeBrowsePane())
+                                   pane->selectPath(selectedPath);
                            });
     }
 

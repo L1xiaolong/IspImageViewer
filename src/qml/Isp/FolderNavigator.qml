@@ -9,8 +9,11 @@ Rectangle {
     id: root
     required property var controller
     property bool designMode: false
+    property bool browsingEnabled: true
     property string iconPrefix: "qrc:/icons/ui/"
     color: Theme.paperWhite
+    enabled: browsingEnabled
+    opacity: browsingEnabled ? 1 : 0.45
     border.color: Theme.opticalGray
     border.width: 0
     clip: true
@@ -74,7 +77,7 @@ Rectangle {
                     bottomPadding: 4
                 }
                 Repeater {
-                    model: root.controller.recentFolders.slice(0, 4)
+                    model: root.browsingEnabled ? root.controller.recentFolders.slice(0, 4) : []
                     delegate: Rectangle {
                         required property string modelData
                         width: navigationColumn.width

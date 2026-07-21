@@ -4,7 +4,9 @@ QtObject {
     id: root
 
     property int gridCellWidth: 196
+    property string filterText: ""
     property int sortMode: 0
+    property int displayMode: 0
     property bool canGoBack: true
     property bool canGoForward: false
     property bool canGoUp: true
@@ -139,11 +141,23 @@ QtObject {
     }
 
     function setFilterText(text) {
+        filterText = text;
         statusText = text.length > 0 ? "Filtered by ‘" + text + "’ · " + selectionCount + " selected" : "16 items · " + selectionCount + " selected";
     }
 
     function setSortMode(mode) {
         sortMode = mode;
+    }
+
+    function setDisplayMode(mode) {
+        displayMode = Math.max(0, Math.min(2, mode));
+    }
+
+    function setWorkspaceSelectionOrder(paths) {
+        for (let index = 0; index < thumbnails.count; ++index) {
+            const ordinal = paths.indexOf(thumbnails.get(index).path) + 1;
+            thumbnails.setProperty(index, "selectionOrdinal", ordinal);
+        }
     }
 
     function selectPath(path, extend, toggle) {
@@ -206,9 +220,6 @@ QtObject {
     }
     function compareSelected() {
         statusText = "Compare " + selectionCount + " selected images";
-    }
-    function openMultiFolder() {
-        statusText = "Multi-folder workspace preview";
     }
     function activatePath(path) {
         statusText = "Open " + path.split("/").pop();

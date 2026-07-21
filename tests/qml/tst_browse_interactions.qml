@@ -11,14 +11,18 @@ TestCase {
     height: 900
     visible: true
 
-    MockBrowseController {
-        id: mockController
+    MockBrowseWorkspace {
+        id: mockWorkspace
+        paneCount: 1
     }
+
+    readonly property var mockController: mockWorkspace.pane0
 
     BrowsePage {
         id: browsePage
         anchors.fill: parent
-        controller: mockController
+        controller: testCase.mockController
+        workspaceController: mockWorkspace
         designMode: true
         iconPrefix: Qt.resolvedUrl("../../assets/icons/ui/").toString()
     }

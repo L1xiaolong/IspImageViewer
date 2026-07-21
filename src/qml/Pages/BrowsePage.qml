@@ -11,19 +11,28 @@ Rectangle {
     // Kept injectable for production and design-time mocks. Qt Design Studio's
     // 2D puppet does not instantiate custom components with required var props.
     property var controller: null
+    property var workspaceController: controller
     property bool navigatorVisible: true
     property real navigatorWidth: Theme.sidebarWidth
     property real galleryStripWidth: 280
-    property int displayMode: 0
+    property int displayMode: controller ? controller.displayMode : 0
     property bool designMode: false
     property string iconPrefix: "qrc:/icons/ui/"
     readonly property var sortLabels: ["Name", "Modified", "Size", "Type"]
-    readonly property bool fileShortcutsEnabled: !toolbar.searchControl.activeFocus &&
+    readonly property bool fileShortcutsEnabled: (workspaceController.hasActivePane === undefined ||
+                                                  workspaceController.hasActivePane) &&
+                                                  !toolbar.searchControl.activeFocus &&
                                                   !folderNameField.activeFocus &&
                                                   !newFolderDialog.opened
     function pathIsRaw(path) {
         const lowered = path.toLowerCase();
         return lowered.endsWith(".raw") || lowered.endsWith(".yuv");
+    }
+    function synchronizeActivePaneControls() {
+        if (!root.controller)
+            return
+        if (toolbar.searchControl.text !== root.controller.filterText)
+            toolbar.searchControl.text = root.controller.filterText || ""
     }
 
     // Retained temporarily as a hidden migration reference. The visible and
@@ -89,7 +98,7 @@ Rectangle {
                         checked: root.displayMode === 0
                         implicitWidth: 40
                         implicitHeight: 40
-                        onClicked: root.displayMode = 0
+                        onClicked: root.controller.setDisplayMode(0)
                     }
                     AppIconButton {
                         iconSource: root.iconPrefix + "list.svg"
@@ -98,7 +107,7 @@ Rectangle {
                         checked: root.displayMode === 1
                         implicitWidth: 40
                         implicitHeight: 40
-                        onClicked: root.displayMode = 1
+                        onClicked: root.controller.setDisplayMode(1)
                     }
                     AppIconButton {
                         iconSource: root.iconPrefix + "columns.svg"
@@ -107,7 +116,7 @@ Rectangle {
                         checked: root.displayMode === 2
                         implicitWidth: 40
                         implicitHeight: 40
-                        onClicked: root.displayMode = 2
+                        onClicked: root.controller.setDisplayMode(2)
                     }
                 }
 
@@ -262,9 +271,9 @@ Rectangle {
                 y: 12
                 width: 126
                 height: 40
-                enabled: root.controller.canCompare
+                enabled: root.workspaceController.canCompare
                 hoverEnabled: true
-                onClicked: root.controller.compareSelected()
+                onClicked: root.workspaceController.compareSelected()
                 background: Rectangle {
                     color: compareButton.enabled && (compareButton.down || compareButton.hovered) ? "#E7EDFC" : Theme.paperWhite
                     radius: Theme.radius
@@ -358,21 +367,37 @@ Rectangle {
         height: Theme.toolbarHeight
         iconPrefix: root.iconPrefix
         displayMode: root.displayMode
-        compareEnabled: root.controller.canCompare
+        sortMode: root.controller.sortMode
+        compareEnabled: root.workspaceController.canCompare
+        activePaneAvailable: root.workspaceController.hasActivePane === undefined
+                             ? true : root.workspaceController.hasActivePane
+        activeDirectoryAvailable: root.controller.currentDirectory.length > 0
+        canAddPane: root.workspaceController.canAddPane === undefined
+                    ? true : root.workspaceController.canAddPane
+        galleryEnabled: root.workspaceController.paneCount === undefined ||
+                        root.workspaceController.paneCount === 1
         navigationWidth: root.navigatorWidth
     }
 
     Connections {
         target: toolbar.gridControl
-        function onClicked() { root.displayMode = 0; }
+        function onClicked() { root.controller.setDisplayMode(0); }
     }
     Connections {
         target: toolbar.listControl
-        function onClicked() { root.displayMode = 1; }
+        function onClicked() { root.controller.setDisplayMode(1); }
     }
     Connections {
         target: toolbar.galleryControl
-        function onClicked() { root.displayMode = 2; }
+        function onClicked() {
+            if (root.workspaceController.paneCount === undefined ||
+                    root.workspaceController.paneCount === 1)
+                root.controller.setDisplayMode(2)
+        }
+    }
+    Connections {
+        target: toolbar.sortControl
+        function onClicked() { sortMenu.popup(); }
     }
     Connections {
         target: toolbar.openFolderControl
@@ -384,7 +409,7 @@ Rectangle {
     }
     Connections {
         target: toolbar.folderCompareControl
-        function onClicked() { root.controller.openMultiFolder(); }
+        function onClicked() { root.workspaceController.addFileManagerPane(); }
     }
     Connections {
         target: toolbar.searchControl
@@ -398,7 +423,7 @@ Rectangle {
     }
     Connections {
         target: toolbar.compareControl
-        function onClicked() { root.controller.compareSelected(); }
+        function onClicked() { root.workspaceController.compareSelected(); }
     }
     Connections {
         target: root.controller
@@ -408,31 +433,32 @@ Rectangle {
                 galleryWorkspace.pixelProbeText = "";
         }
     }
+    Connections {
+        target: root.workspaceController
+        function onActivePaneChanged() { Qt.callLater(root.synchronizeActivePaneControls) }
+    }
+    Connections {
+        target: root.controller
+        function onFilterTextChanged() { root.synchronizeActivePaneControls() }
+    }
+    Component.onCompleted: synchronizeActivePaneControls()
 
-    Menu {
+    AppMenu {
         id: sortMenu
-        MenuItem {
-            text: "Name"
-            checkable: true
-            checked: root.controller.sortMode === 0
+        AppMenuItem {
+            text: (root.controller.sortMode === 0 ? "✓  " : "    ") + "Name"
             onTriggered: root.controller.setSortMode(0)
         }
-        MenuItem {
-            text: "Modified time"
-            checkable: true
-            checked: root.controller.sortMode === 1
+        AppMenuItem {
+            text: (root.controller.sortMode === 1 ? "✓  " : "    ") + "Modified time"
             onTriggered: root.controller.setSortMode(1)
         }
-        MenuItem {
-            text: "File size"
-            checkable: true
-            checked: root.controller.sortMode === 2
+        AppMenuItem {
+            text: (root.controller.sortMode === 2 ? "✓  " : "    ") + "File size"
             onTriggered: root.controller.setSortMode(2)
         }
-        MenuItem {
-            text: "File type"
-            checkable: true
-            checked: root.controller.sortMode === 3
+        AppMenuItem {
+            text: (root.controller.sortMode === 3 ? "✓  " : "    ") + "File type"
             onTriggered: root.controller.setSortMode(3)
         }
     }
@@ -460,8 +486,9 @@ Rectangle {
         }
         MenuSeparator {}
         MenuItem {
-            text: "Multi-folder workspace…"
-            onTriggered: root.controller.openMultiFolder()
+            text: "Add file manager"
+            enabled: root.workspaceController.canAddPane === undefined || root.workspaceController.canAddPane
+            onTriggered: root.workspaceController.addFileManagerPane()
         }
     }
 
@@ -471,6 +498,8 @@ Rectangle {
         objectName: "folderNavigator"
         controller: root.controller
         designMode: root.designMode
+        browsingEnabled: root.workspaceController.hasActivePane === undefined ||
+                         root.workspaceController.hasActivePane
         iconPrefix: root.iconPrefix
         anchors.left: parent.left
         anchors.top: toolbar.bottom
@@ -525,11 +554,259 @@ Rectangle {
         }
     }
 
+    // The production workspace keeps every folder session in the main window.
+    // SplitView is recreated when the pane count changes, which intentionally
+    // restores equal proportions after add/close operations.
+    Item {
+        id: paneWorkspace
+        objectName: "paneWorkspace"
+        visible: root.displayMode !== 2 || root.workspaceController.paneCount !== 1
+        anchors.left: gutter.right
+        anchors.right: parent.right
+        anchors.top: toolbar.bottom
+        anchors.bottom: statusRail.top
+        anchors.margins: 8
+
+        Loader {
+            id: paneLayoutLoader
+            anchors.fill: parent
+            sourceComponent: {
+                const count = root.workspaceController.paneCount
+                if (count === 0) return emptyWorkspaceComponent
+                if (count === 1) return singlePaneComponent
+                if (count === 4) return fourPaneComponent
+                return horizontalPanesComponent
+            }
+        }
+    }
+
+    Component {
+        id: emptyWorkspaceComponent
+        Rectangle {
+            color: Theme.sensorWhite
+            border.color: Theme.opticalGray
+            radius: 6
+            Column {
+                anchors.centerIn: parent
+                width: Math.min(parent.width - 40, 340)
+                spacing: 12
+                Image {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 42
+                    height: 42
+                    source: root.iconPrefix + "folder-pane-plus.svg"
+                    sourceSize: Qt.size(84, 84)
+                    opacity: 0.58
+                }
+                Text {
+                    width: parent.width
+                    text: "No file managers"
+                    horizontalAlignment: Text.AlignHCenter
+                    color: Theme.graphiteInk
+                    font.family: Theme.uiFont
+                    font.pixelSize: 15
+                    font.weight: Font.DemiBold
+                }
+                Text {
+                    width: parent.width
+                    text: "Add a file manager to browse and compare images"
+                    horizontalAlignment: Text.AlignHCenter
+                    color: Theme.mutedInk
+                    font.family: Theme.uiFont
+                    font.pixelSize: 12
+                }
+                Button {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 150
+                    height: 34
+                    text: "Add file manager"
+                    onClicked: root.workspaceController.addFileManagerPane()
+                    background: Rectangle {
+                        radius: 6
+                        color: parent.down ? "#E2E9ED" : parent.hovered ? "#F1F5F7" : Theme.paperWhite
+                        border.color: Theme.opticalGray
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        color: Theme.graphiteInk
+                        font.family: Theme.uiFont
+                        font.pixelSize: 12
+                        font.weight: Font.Medium
+                    }
+                }
+            }
+        }
+    }
+
+    Component {
+        id: singlePaneComponent
+        BrowserPane {
+            controller: root.workspaceController.panes[0]
+            workspaceController: root.workspaceController
+            paneIndex: 0
+            iconPrefix: root.iconPrefix
+            onNewFolderRequested: newFolderDialog.open()
+        }
+    }
+
+    Component {
+        id: horizontalPanesComponent
+        SplitView {
+            id: horizontalSplit
+            orientation: Qt.Horizontal
+            function resetEqual() {
+                for (let index = 0; index < paneRepeater.count; ++index)
+                    paneRepeater.itemAt(index).resetSplitWidth()
+            }
+            handle: Rectangle {
+                objectName: "horizontalPaneHandle"
+                implicitWidth: 7
+                color: SplitHandle.pressed || SplitHandle.hovered ? "#C8D4DC" : "transparent"
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 1
+                    height: parent.height
+                    color: SplitHandle.pressed || SplitHandle.hovered ? "#7893A6" : Theme.opticalGray
+                }
+                TapHandler { onDoubleTapped: horizontalSplit.resetEqual() }
+            }
+            Repeater {
+                id: paneRepeater
+                model: root.workspaceController.panes
+                delegate: BrowserPane {
+                    required property var modelData
+                    required property int index
+                    controller: modelData
+                    workspaceController: root.workspaceController
+                    paneIndex: index
+                    iconPrefix: root.iconPrefix
+                    SplitView.fillWidth: true
+                    SplitView.minimumWidth: 190
+                    SplitView.preferredWidth: (horizontalSplit.width -
+                                               Math.max(0, paneRepeater.count - 1) * 7) /
+                                              Math.max(1, paneRepeater.count)
+                    function resetSplitWidth() {
+                        SplitView.preferredWidth = (horizontalSplit.width -
+                                                    Math.max(0, paneRepeater.count - 1) * 7) /
+                                                   Math.max(1, paneRepeater.count)
+                    }
+                    onNewFolderRequested: newFolderDialog.open()
+                }
+            }
+        }
+    }
+
+    Component {
+        id: fourPaneComponent
+        SplitView {
+            id: verticalSplit
+            orientation: Qt.Vertical
+            function resetEqual() {
+                topRow.SplitView.preferredHeight = (verticalSplit.height - 7) / 2
+                bottomRow.SplitView.preferredHeight = (verticalSplit.height - 7) / 2
+            }
+            handle: Rectangle {
+                objectName: "verticalPaneHandle"
+                implicitHeight: 7
+                color: SplitHandle.pressed || SplitHandle.hovered ? "#C8D4DC" : "transparent"
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: parent.width
+                    height: 1
+                    color: SplitHandle.pressed || SplitHandle.hovered ? "#7893A6" : Theme.opticalGray
+                }
+                TapHandler { onDoubleTapped: verticalSplit.resetEqual() }
+            }
+            SplitView {
+                id: topRow
+                orientation: Qt.Horizontal
+                SplitView.fillHeight: true
+                SplitView.minimumHeight: 190
+                SplitView.preferredHeight: (verticalSplit.height - 7) / 2
+                function resetEqual() {
+                    topLeft.SplitView.preferredWidth = (topRow.width - 7) / 2
+                    topRight.SplitView.preferredWidth = (topRow.width - 7) / 2
+                }
+                handle: Rectangle {
+                    objectName: "topRowPaneHandle"
+                    implicitWidth: 7
+                    color: SplitHandle.pressed || SplitHandle.hovered ? "#C8D4DC" : "transparent"
+                    Rectangle { anchors.centerIn: parent; width: 1; height: parent.height; color: SplitHandle.pressed || SplitHandle.hovered ? "#7893A6" : Theme.opticalGray }
+                    TapHandler { onDoubleTapped: topRow.resetEqual() }
+                }
+                BrowserPane {
+                    id: topLeft
+                    controller: root.workspaceController.panes[0]
+                    workspaceController: root.workspaceController
+                    paneIndex: 0
+                    iconPrefix: root.iconPrefix
+                    SplitView.fillWidth: true
+                    SplitView.minimumWidth: 190
+                    SplitView.preferredWidth: (topRow.width - 7) / 2
+                    onNewFolderRequested: newFolderDialog.open()
+                }
+                BrowserPane {
+                    id: topRight
+                    controller: root.workspaceController.panes[1]
+                    workspaceController: root.workspaceController
+                    paneIndex: 1
+                    iconPrefix: root.iconPrefix
+                    SplitView.fillWidth: true
+                    SplitView.minimumWidth: 190
+                    SplitView.preferredWidth: (topRow.width - 7) / 2
+                    onNewFolderRequested: newFolderDialog.open()
+                }
+            }
+            SplitView {
+                id: bottomRow
+                orientation: Qt.Horizontal
+                SplitView.fillHeight: true
+                SplitView.minimumHeight: 190
+                SplitView.preferredHeight: (verticalSplit.height - 7) / 2
+                function resetEqual() {
+                    bottomLeft.SplitView.preferredWidth = (bottomRow.width - 7) / 2
+                    bottomRight.SplitView.preferredWidth = (bottomRow.width - 7) / 2
+                }
+                handle: Rectangle {
+                    objectName: "bottomRowPaneHandle"
+                    implicitWidth: 7
+                    color: SplitHandle.pressed || SplitHandle.hovered ? "#C8D4DC" : "transparent"
+                    Rectangle { anchors.centerIn: parent; width: 1; height: parent.height; color: SplitHandle.pressed || SplitHandle.hovered ? "#7893A6" : Theme.opticalGray }
+                    TapHandler { onDoubleTapped: bottomRow.resetEqual() }
+                }
+                BrowserPane {
+                    id: bottomLeft
+                    controller: root.workspaceController.panes[2]
+                    workspaceController: root.workspaceController
+                    paneIndex: 2
+                    iconPrefix: root.iconPrefix
+                    SplitView.fillWidth: true
+                    SplitView.minimumWidth: 190
+                    SplitView.preferredWidth: (bottomRow.width - 7) / 2
+                    onNewFolderRequested: newFolderDialog.open()
+                }
+                BrowserPane {
+                    id: bottomRight
+                    controller: root.workspaceController.panes[3]
+                    workspaceController: root.workspaceController
+                    paneIndex: 3
+                    iconPrefix: root.iconPrefix
+                    SplitView.fillWidth: true
+                    SplitView.minimumWidth: 190
+                    SplitView.preferredWidth: (bottomRow.width - 7) / 2
+                    onNewFolderRequested: newFolderDialog.open()
+                }
+            }
+        }
+    }
+
     // Design reference: calibration contact sheet. Selection is a 2px rail, not a blue card.
     GridView {
         id: contactSheet
         objectName: "contactSheet"
-        visible: root.displayMode !== 2
+        visible: false
         anchors.left: gutter.right
         anchors.right: parent.right
         anchors.top: toolbar.bottom
@@ -656,7 +933,7 @@ Rectangle {
             else
                 galleryFileContextMenu.popup(x, y);
         }
-        visible: root.displayMode === 2
+        visible: root.displayMode === 2 && root.workspaceController.paneCount === 1
         anchors.left: gutter.right
         anchors.right: parent.right
         anchors.top: toolbar.bottom
@@ -1171,6 +1448,7 @@ Rectangle {
     // including the large gallery preview. Internal thumbnail drags are intentionally ignored.
     DropArea {
         id: workspaceDropArea
+        enabled: root.displayMode === 2 && root.workspaceController.paneCount === 1
         property bool externalDragActive: false
         anchors.left: parent.left
         anchors.right: parent.right
@@ -1221,7 +1499,7 @@ Rectangle {
             anchors.leftMargin: 12
             anchors.verticalCenter: parent.verticalCenter
             text: root.displayMode === 2 && galleryWorkspace.pixelProbeText.length > 0
-                  ? galleryWorkspace.pixelProbeText : root.controller.statusText
+                  ? galleryWorkspace.pixelProbeText : root.workspaceController.statusText
             color: Theme.mutedInk
             font.family: Theme.monoFont
             font.pixelSize: 11
@@ -1293,8 +1571,8 @@ Rectangle {
         }
         AppMenuItem {
             text: "Compare selected"
-            enabled: root.controller.canCompare
-            onTriggered: root.controller.compareSelected()
+            enabled: root.workspaceController.canCompare
+            onTriggered: root.workspaceController.compareSelected()
         }
         AppMenuSeparator {}
         AppMenuItem {
@@ -1334,7 +1612,7 @@ Rectangle {
         id: galleryRawFileContextMenu
         objectName: "galleryRawFileContextMenu"
         AppMenuItem { text: "Open full screen"; onTriggered: root.controller.activatePath(galleryWorkspace.contextPath) }
-        AppMenuItem { text: "Compare selected"; enabled: root.controller.canCompare; onTriggered: root.controller.compareSelected() }
+        AppMenuItem { text: "Compare selected"; enabled: root.workspaceController.canCompare; onTriggered: root.workspaceController.compareSelected() }
         AppMenuItem { text: "RAW/YUV parameters…"; enabled: root.controller.canEditRaw; onTriggered: root.controller.editSelectedRawParameters() }
         AppMenuSeparator {}
         AppMenuItem { text: "Cut"; shortcutText: Qt.platform.os === "osx" ? "⌘X" : "Ctrl+X"; onTriggered: root.controller.copySelected(true) }
@@ -1567,8 +1845,8 @@ Rectangle {
     }
     Shortcut {
         sequence: "C"
-        enabled: root.fileShortcutsEnabled && root.controller.canCompare
-        onActivated: root.controller.compareSelected()
+        enabled: root.fileShortcutsEnabled && root.workspaceController.canCompare
+        onActivated: root.workspaceController.compareSelected()
     }
     Shortcut {
         sequence: "Delete"

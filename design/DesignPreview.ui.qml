@@ -9,14 +9,15 @@ Item {
     width: 1440
     height: 900
 
-    MockBrowseController {
-        id: mockController
+    MockBrowseWorkspace {
+        id: mockWorkspace
     }
 
     BrowsePage {
         id: productionBrowsePage
         anchors.fill: parent
-        controller: mockController
+        controller: mockWorkspace.activePane
+        workspaceController: mockWorkspace
         designMode: true
         iconPrefix: Qt.resolvedUrl("../assets/icons/ui/").toString()
     }

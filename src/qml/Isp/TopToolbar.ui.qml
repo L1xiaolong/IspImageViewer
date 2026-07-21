@@ -10,7 +10,12 @@ Rectangle {
 
     property string iconPrefix: "qrc:/icons/ui/"
     property int displayMode: 0
+    property int sortMode: 0
     property bool compareEnabled: false
+    property bool activePaneAvailable: true
+    property bool activeDirectoryAvailable: true
+    property bool canAddPane: true
+    property bool galleryEnabled: true
     property real navigationWidth: Theme.sidebarWidth
 
     property alias openFolderControl: openFolderButton
@@ -19,6 +24,7 @@ Rectangle {
     property alias gridControl: gridModeButton
     property alias listControl: listModeButton
     property alias galleryControl: galleryModeButton
+    property alias sortControl: sortButton
     property alias compareControl: compareButton
     property alias searchControl: fileSearch
     property alias clearSearchControl: clearMouse
@@ -52,6 +58,7 @@ Rectangle {
         y: 8
         width: 36
         height: 36
+        enabled: root.activePaneAvailable
         iconSource: root.iconPrefix + "folder-open.svg"
         toolTipText: "Open folder"
     }
@@ -63,6 +70,7 @@ Rectangle {
         y: 8
         width: 36
         height: 36
+        enabled: root.activePaneAvailable && root.activeDirectoryAvailable
         iconSource: root.iconPrefix + "folder-plus.svg"
         toolTipText: "New folder"
     }
@@ -72,15 +80,17 @@ Rectangle {
         objectName: "folderCompareButton"
         x: brandDivider.x + 90
         y: 8
-        width: 36
+        width: 56
         height: 36
-        iconSource: root.iconPrefix + "multi-source.svg"
-        toolTipText: "Compare folders"
+        enabled: root.canAddPane
+        iconSource: root.iconPrefix + "folder-pane-plus.svg"
+        text: "+1"
+        toolTipText: enabled ? "Add file manager (+1)" : "Maximum 4 file managers"
     }
 
     Rectangle {
         id: fileDivider
-        x: brandDivider.x + 136
+        x: brandDivider.x + 156
         y: 14
         width: 1
         height: 24
@@ -90,12 +100,13 @@ Rectangle {
     AppIconButton {
         id: gridModeButton
         objectName: "gridModeButton"
-        x: brandDivider.x + 150
+        x: brandDivider.x + 170
         y: 8
         width: 36
         height: 36
         checkable: true
         checked: root.displayMode === 0
+        enabled: root.activePaneAvailable && root.activeDirectoryAvailable
         iconSource: root.iconPrefix + "grid.svg"
         toolTipText: "Grid view"
     }
@@ -103,12 +114,13 @@ Rectangle {
     AppIconButton {
         id: listModeButton
         objectName: "listModeButton"
-        x: brandDivider.x + 188
+        x: brandDivider.x + 208
         y: 8
         width: 36
         height: 36
         checkable: true
         checked: root.displayMode === 1
+        enabled: root.activePaneAvailable && root.activeDirectoryAvailable
         iconSource: root.iconPrefix + "list.svg"
         toolTipText: "List view"
     }
@@ -116,19 +128,21 @@ Rectangle {
     AppIconButton {
         id: galleryModeButton
         objectName: "galleryModeButton"
-        x: brandDivider.x + 226
+        x: brandDivider.x + 246
         y: 8
         width: 36
         height: 36
         checkable: true
         checked: root.displayMode === 2
+        enabled: root.activePaneAvailable && root.activeDirectoryAvailable && root.galleryEnabled
         iconSource: root.iconPrefix + "gallery.svg"
         toolTipText: "Gallery view"
     }
 
     Rectangle {
         id: activeViewRail
-        x: root.displayMode === 0 ? brandDivider.x + 160 : root.displayMode === 1 ? brandDivider.x + 198 : brandDivider.x + 236
+        visible: root.activePaneAvailable && root.activeDirectoryAvailable
+        x: root.displayMode === 0 ? brandDivider.x + 180 : root.displayMode === 1 ? brandDivider.x + 218 : brandDivider.x + 256
         y: 47
         width: 16
         height: 2
@@ -144,7 +158,7 @@ Rectangle {
 
     Rectangle {
         id: viewDivider
-        x: brandDivider.x + 272
+        x: brandDivider.x + 292
         y: 14
         width: 1
         height: 24
@@ -152,9 +166,22 @@ Rectangle {
     }
 
     AppIconButton {
+        id: sortButton
+        objectName: "sortButton"
+        x: brandDivider.x + 306
+        y: 8
+        width: 36
+        height: 36
+        enabled: root.activePaneAvailable && root.activeDirectoryAvailable
+        iconSource: root.iconPrefix + "sort.svg"
+        toolTipText: ["Sort by name", "Sort by modified time", "Sort by file size",
+                      "Sort by file type"][root.sortMode]
+    }
+
+    AppIconButton {
         id: compareButton
         objectName: "compareButton"
-        x: brandDivider.x + 286
+        x: brandDivider.x + 344
         y: 8
         width: 36
         height: 36
@@ -171,6 +198,7 @@ Rectangle {
         width: 236
         height: 34
         placeholderText: "Search files"
+        enabled: root.activePaneAvailable && root.activeDirectoryAvailable
         selectByMouse: true
         leftPadding: 34
         rightPadding: 40

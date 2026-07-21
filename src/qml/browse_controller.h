@@ -45,7 +45,9 @@ class BrowseController final : public QObject {
     Q_PROPERTY(bool canGoUp READ canGoUp NOTIFY navigationStateChanged)
     Q_PROPERTY(bool canPaste READ canPaste NOTIFY clipboardStateChanged)
     Q_PROPERTY(bool canCompare READ canCompare NOTIFY selectionChanged)
+    Q_PROPERTY(QString filterText READ filterText NOTIFY filterTextChanged)
     Q_PROPERTY(int sortMode READ sortMode NOTIFY sortModeChanged)
+    Q_PROPERTY(int displayMode READ displayMode WRITE setDisplayMode NOTIFY displayModeChanged)
     Q_PROPERTY(int gridCellWidth READ gridCellWidth WRITE setGridCellWidth NOTIFY gridCellWidthChanged)
     Q_PROPERTY(QSize galleryImageSize READ galleryImageSize NOTIFY galleryImageChanged)
     Q_PROPERTY(bool galleryImageReady READ galleryImageReady NOTIFY galleryImageChanged)
@@ -55,6 +57,8 @@ class BrowseController final : public QObject {
   public:
     BrowseController(std::shared_ptr<const IImageDecoder> decoder,
                      const QString& initialDirectory = {}, QObject* parent = nullptr);
+    BrowseController(ImageLoader* sharedLoader, QFileSystemModel* sharedFileSystemModel,
+                     const QString& initialDirectory, bool startEmpty, QObject* parent = nullptr);
     ~BrowseController() override;
 
     [[nodiscard]] QAbstractItemModel* thumbnails() const;
@@ -74,13 +78,18 @@ class BrowseController final : public QObject {
     [[nodiscard]] bool canGoUp() const;
     [[nodiscard]] bool canPaste() const;
     [[nodiscard]] bool canCompare() const;
+    [[nodiscard]] QString filterText() const { return filterText_; }
     [[nodiscard]] int sortMode() const;
+    [[nodiscard]] int displayMode() const { return displayMode_; }
     [[nodiscard]] int gridCellWidth() const { return gridCellWidth_; }
     [[nodiscard]] QSize galleryImageSize() const { return galleryImageSize_; }
     [[nodiscard]] bool galleryImageReady() const { return galleryFrame_ != nullptr; }
     [[nodiscard]] QString galleryInfoText() const { return galleryInfoText_; }
     [[nodiscard]] bool canEditRaw() const;
     [[nodiscard]] ImageLoader* loader() const { return loader_; }
+    [[nodiscard]] QStringList selectedImagePaths() const;
+    void setWorkspaceSelectionOrder(const QStringList& paths);
+    void setSharedRecentFolders(const QStringList& paths);
 
     Q_INVOKABLE void openDirectory(const QString& path);
     Q_INVOKABLE void chooseDirectory();
@@ -92,6 +101,7 @@ class BrowseController final : public QObject {
     Q_INVOKABLE void clearSelection();
     Q_INVOKABLE void setFilterText(const QString& text);
     Q_INVOKABLE void setSortMode(int mode);
+    Q_INVOKABLE void setDisplayMode(int mode);
     Q_INVOKABLE QString createFolder(const QString& name);
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void selectAll();
@@ -106,7 +116,6 @@ class BrowseController final : public QObject {
     Q_INVOKABLE void showSelectedProperties();
     Q_INVOKABLE void openSelected();
     Q_INVOKABLE void compareSelected();
-    Q_INVOKABLE void openMultiFolder();
     Q_INVOKABLE void editSelectedRawParameters();
     Q_INVOKABLE void setGalleryPath(const QString& path);
     Q_INVOKABLE QString probeGalleryPixel(int x, int y) const;
@@ -122,6 +131,8 @@ class BrowseController final : public QObject {
     void navigationStateChanged();
     void clipboardStateChanged();
     void sortModeChanged();
+    void filterTextChanged();
+    void displayModeChanged();
     void gridCellWidthChanged();
     void galleryImageChanged();
     void compareRequested(const QStringList& paths);
@@ -132,14 +143,14 @@ class BrowseController final : public QObject {
     void setStatusText(const QString& text);
     void updateSelection(const QStringList& paths);
     void transferPaths(const QStringList& paths, bool move, const QString& targetDirectory = {});
-    [[nodiscard]] QStringList selectedImagePaths() const;
     [[nodiscard]] QStringList allImagePaths() const;
+    void initialize(const QString& initialDirectory, bool startEmpty);
 
     ImageLoader* loader_ = nullptr;
     DirectoryScanner* scanner_ = nullptr;
     ThumbnailModel* thumbnailModel_ = nullptr;
     ThumbnailFilterProxyModel* filterModel_ = nullptr;
-    QFileSystemModel fileSystemModel_;
+    QFileSystemModel* fileSystemModel_ = nullptr;
     QFileSystemWatcher* directoryWatcher_ = nullptr;
     QTimer* refreshTimer_ = nullptr;
     QTimer* recentCandidateTimer_ = nullptr;
@@ -149,11 +160,13 @@ class BrowseController final : public QObject {
     QStringList selectedPaths_;
     QStringList navigationHistory_;
     QString statusText_;
+    QString filterText_;
     int navigationHistoryIndex_ = -1;
     quint64 scanGeneration_ = 0;
     quint64 galleryRequestId_ = 0;
     quint64 propertiesRequestId_ = 0;
     int gridCellWidth_ = 196;
+    int displayMode_ = 0;
     QString galleryPath_;
     QString selectionAnchorPath_;
     QString galleryInfoText_;

@@ -31,6 +31,21 @@ ispview_enable_warnings(ispview_ui_tests)
 add_test(NAME ispview_ui_tests COMMAND ispview_ui_tests)
 set_tests_properties(ispview_ui_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+qt_add_executable(ispview_qml_workspace_tests
+    qml_workspace_controller_tests.cpp
+    ../src/qml/browse_controller.h
+    ../src/qml/browse_controller.cpp
+    ../src/qml/browse_workspace_controller.h
+    ../src/qml/browse_workspace_controller.cpp
+)
+target_link_libraries(ispview_qml_workspace_tests PRIVATE ispview_ui ispview_io Qt6::Test)
+target_compile_definitions(ispview_qml_workspace_tests PRIVATE
+    ISPVIEW_HAS_LIBRAW=$<BOOL:${ISPVIEW_HAS_LIBRAW}>
+)
+ispview_enable_warnings(ispview_qml_workspace_tests)
+add_test(NAME ispview_qml_workspace_tests COMMAND ispview_qml_workspace_tests)
+set_tests_properties(ispview_qml_workspace_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 qt_add_executable(ispview_render_tests
     render_tests.cpp
 )

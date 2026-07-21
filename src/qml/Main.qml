@@ -32,7 +32,8 @@ ApplicationWindow {
     BrowsePage {
         id: browsePage
         anchors.fill: parent
-        controller: browseController
+        controller: browseController.activePane
+        workspaceController: browseController
         visible: !window.showingCompare
     }
     ComparePage {

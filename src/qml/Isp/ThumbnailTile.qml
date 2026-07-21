@@ -6,6 +6,7 @@ import "."
 Item {
     id: root
     required property var controller
+    property var workspaceController: controller
     property string path
     property string fileName
     property string technicalLabel
@@ -226,8 +227,8 @@ Item {
         }
         AppMenuItem {
             text: "Compare selected"
-            enabled: root.controller.canCompare
-            onTriggered: root.controller.compareSelected()
+            enabled: root.workspaceController.canCompare
+            onTriggered: root.workspaceController.compareSelected()
         }
         AppMenuSeparator {}
         AppMenuItem {
@@ -268,8 +269,8 @@ Item {
         AppMenuItem { text: "Open full screen"; onTriggered: root.activated() }
         AppMenuItem {
             text: "Compare selected"
-            enabled: root.controller.canCompare
-            onTriggered: root.controller.compareSelected()
+            enabled: root.workspaceController.canCompare
+            onTriggered: root.workspaceController.compareSelected()
         }
         AppMenuItem {
             text: "RAW/YUV parameters…"

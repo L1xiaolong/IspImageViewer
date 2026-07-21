@@ -8,6 +8,8 @@
         <file>../assets/icons/ui/cut.svg</file>
         <file>../assets/icons/ui/folder-open.svg</file>
         <file>../assets/icons/ui/folder-plus.svg</file>
+        <file>../assets/icons/ui/folder-pane-plus.svg</file>
+        <file>../assets/icons/ui/close.svg</file>
         <file>../assets/icons/ui/folder.svg</file>
         <file>../assets/icons/ui/forward.svg</file>
         <file>../assets/icons/ui/gallery.svg</file>
@@ -19,6 +21,7 @@
         <file>../assets/icons/ui/paste.svg</file>
         <file>../assets/icons/ui/plus.svg</file>
         <file>../assets/icons/ui/search.svg</file>
+        <file>../assets/icons/ui/sort.svg</file>
         <file>../assets/icons/ui/sliders.svg</file>
         <file>../assets/icons/ui/star.svg</file>
         <file>../assets/icons/ui/trash.svg</file>
@@ -27,12 +30,14 @@
         <file>DesignPreview.ui.qml</file>
         <file>ISPImageViewerDesign.qmlproject</file>
         <file>MockBrowseController.qml</file>
+        <file>MockBrowseWorkspace.qml</file>
         <file>qtquickcontrols2.conf</file>
         <file>RuntimePreview.qml</file>
         <file>../src/qml/Isp/AppIconButton.qml</file>
         <file>../src/qml/Isp/AppMenu.qml</file>
         <file>../src/qml/Isp/AppMenuItem.qml</file>
         <file>../src/qml/Isp/AppMenuSeparator.qml</file>
+        <file>../src/qml/Isp/BrowserPane.qml</file>
         <file>../src/qml/Isp/FolderNavigator.qml</file>
         <file>../src/qml/Isp/qmldir</file>
         <file>../src/qml/Isp/Theme.qml</file>

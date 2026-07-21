@@ -1,0 +1,169 @@
+#include "qml/browse_workspace_controller.h"
+
+#include "io/image_loader.h"
+#include "qml/browse_controller.h"
+
+#include <QFileSystemModel>
+#include <QSet>
+
+#include <algorithm>
+#include <utility>
+
+namespace ispview {
+
+BrowseWorkspaceController::BrowseWorkspaceController(
+    std::shared_ptr<const IImageDecoder> decoder, const QString& initialDirectory, QObject* parent)
+    : QObject(parent), loader_(new ImageLoader(std::move(decoder), this)),
+      folderTreeModel_(new QFileSystemModel(this)) {
+    emptyPane_ = new BrowseController(loader_, folderTreeModel_, {}, true, this);
+    panes_.append(createPane(initialDirectory, false));
+    activePaneIndex_ = 0;
+    recomputeSelection();
+}
+
+QVariantList BrowseWorkspaceController::panes() const {
+    QVariantList result;
+    result.reserve(panes_.size());
+    for (BrowseController* pane : panes_) {
+        result.append(QVariant::fromValue(static_cast<QObject*>(pane)));
+    }
+    return result;
+}
+
+QObject* BrowseWorkspaceController::activePane() const {
+    BrowseController* active = activeBrowsePane();
+    return active ? active : emptyPane_;
+}
+
+BrowseController* BrowseWorkspaceController::activeBrowsePane() const {
+    return activePaneIndex_ >= 0 && activePaneIndex_ < panes_.size()
+        ? panes_.at(activePaneIndex_) : nullptr;
+}
+
+bool BrowseWorkspaceController::canCompare() const {
+    return selectedImagePaths_.size() >= 2 && selectedImagePaths_.size() <= 4;
+}
+
+QString BrowseWorkspaceController::statusText() const {
+    const BrowseController* active = activeBrowsePane();
+    if (!active) return QStringLiteral("No file manager · Add one to browse folders");
+    QString result = active->statusText();
+    if (!selectedImagePaths_.isEmpty()) {
+        int selectedPanes = 0;
+        for (const BrowseController* pane : panes_)
+            if (!pane->selectedImagePaths().isEmpty()) ++selectedPanes;
+        result += QStringLiteral(" · %1 image(s) across %2 manager(s)")
+                      .arg(selectedImagePaths_.size()).arg(selectedPanes);
+    }
+    return result;
+}
+
+BrowseController* BrowseWorkspaceController::createPane(const QString& initialDirectory,
+                                                        bool startEmpty) {
+    auto* pane = new BrowseController(loader_, folderTreeModel_, initialDirectory, startEmpty, this);
+    connectPane(pane);
+    return pane;
+}
+
+void BrowseWorkspaceController::connectPane(BrowseController* pane) {
+    connect(pane, &BrowseController::selectionChanged, this,
+            &BrowseWorkspaceController::recomputeSelection);
+    connect(pane, &BrowseController::statusTextChanged, this, [this, pane] {
+        if (pane == activeBrowsePane()) emit statusTextChanged();
+    });
+    connect(pane, &BrowseController::currentDirectoryChanged, this, [this, pane] {
+        if (pane == activeBrowsePane()) {
+            emit activePaneChanged();
+            emit statusTextChanged();
+        }
+    });
+    connect(pane, &BrowseController::recentFoldersChanged, this,
+            [this, pane] { synchronizeRecentFolders(pane); });
+}
+
+void BrowseWorkspaceController::synchronizeRecentFolders(BrowseController* source) {
+    if (synchronizingRecentFolders_) return;
+    synchronizingRecentFolders_ = true;
+    const QStringList recent = source->recentFolders();
+    emptyPane_->setSharedRecentFolders(recent);
+    for (BrowseController* pane : panes_)
+        if (pane != source) pane->setSharedRecentFolders(recent);
+    synchronizingRecentFolders_ = false;
+}
+
+void BrowseWorkspaceController::addFileManagerPane() {
+    if (!canAddPane()) return;
+    panes_.append(createPane({}, true));
+    if (panes_.size() == 2) {
+        for (BrowseController* pane : panes_)
+            if (pane->displayMode() == 2) pane->setDisplayMode(0);
+    }
+    if (activePaneIndex_ < 0) {
+        activePaneIndex_ = 0;
+        emit activePaneChanged();
+    }
+    emit panesChanged();
+    emit statusTextChanged();
+}
+
+void BrowseWorkspaceController::activatePane(int index) {
+    if (index < 0 || index >= panes_.size() || activePaneIndex_ == index) return;
+    activePaneIndex_ = index;
+    emit activePaneChanged();
+    emit statusTextChanged();
+}
+
+void BrowseWorkspaceController::closePane(int index) {
+    if (index < 0 || index >= panes_.size()) return;
+    const int previousActiveIndex = activePaneIndex_;
+    BrowseController* removed = panes_.takeAt(index);
+    const bool closedActive = activePaneIndex_ == index;
+    if (panes_.isEmpty()) {
+        activePaneIndex_ = -1;
+    } else if (closedActive) {
+        activePaneIndex_ = std::min(index, static_cast<int>(panes_.size()) - 1);
+    } else if (index < activePaneIndex_) {
+        --activePaneIndex_;
+    }
+    removed->deleteLater();
+    recomputeSelection();
+    emit panesChanged();
+    if (closedActive || activePaneIndex_ != previousActiveIndex) emit activePaneChanged();
+    emit statusTextChanged();
+}
+
+void BrowseWorkspaceController::compareSelected() {
+    if (!canCompare()) return;
+    emit compareRequested(selectedImagePaths_);
+}
+
+void BrowseWorkspaceController::recomputeSelection() {
+    QStringList allOrdered;
+    QStringList imagesOrdered;
+    QSet<QString> seenAll;
+    QSet<QString> seenImages;
+    for (BrowseController* pane : panes_) {
+        for (const QString& path : pane->selectedPaths()) {
+            if (!seenAll.contains(path)) {
+                seenAll.insert(path);
+                allOrdered.append(path);
+            }
+        }
+        for (const QString& path : pane->selectedImagePaths()) {
+            if (!seenImages.contains(path)) {
+                seenImages.insert(path);
+                imagesOrdered.append(path);
+            }
+        }
+    }
+    for (BrowseController* pane : panes_) pane->setWorkspaceSelectionOrder(allOrdered);
+    if (selectedImagePaths_ == imagesOrdered) {
+        emit statusTextChanged();
+        return;
+    }
+    selectedImagePaths_ = imagesOrdered;
+    emit workspaceSelectionChanged();
+    emit statusTextChanged();
+}
+
+} // namespace ispview

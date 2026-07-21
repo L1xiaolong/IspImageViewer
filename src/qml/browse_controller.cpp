@@ -10,7 +10,6 @@
 #include "ui/file_clipboard.h"
 #include "ui/full_screen_window.h"
 #include "ui/image_properties_panel.h"
-#include "ui/multi_folder_window.h"
 #include "ui/raw_parameter_panel.h"
 #include "ui/thumbnail_model.h"
 #include "ui/trash_confirmation.h"
@@ -78,18 +77,35 @@ QLabel* dialogLabel(const QString& text, const QString& objectName, QWidget* par
 BrowseController::BrowseController(std::shared_ptr<const IImageDecoder> decoder,
                                    const QString& initialDirectory, QObject* parent)
     : QObject(parent), loader_(new ImageLoader(std::move(decoder), this)),
-      scanner_(new DirectoryScanner(this)), thumbnailModel_(new ThumbnailModel(loader_, this)),
-      filterModel_(new ThumbnailFilterProxyModel(this)),
-      directoryWatcher_(new QFileSystemWatcher(this)), refreshTimer_(new QTimer(this)),
-      recentCandidateTimer_(new QTimer(this)) {
+      fileSystemModel_(new QFileSystemModel(this)) {
+    initialize(initialDirectory, false);
+}
+
+BrowseController::BrowseController(ImageLoader* sharedLoader,
+                                   QFileSystemModel* sharedFileSystemModel,
+                                   const QString& initialDirectory, bool startEmpty,
+                                   QObject* parent)
+    : QObject(parent), loader_(sharedLoader), fileSystemModel_(sharedFileSystemModel) {
+    Q_ASSERT(loader_);
+    Q_ASSERT(fileSystemModel_);
+    initialize(initialDirectory, startEmpty);
+}
+
+void BrowseController::initialize(const QString& initialDirectory, bool startEmpty) {
+    scanner_ = new DirectoryScanner(this);
+    thumbnailModel_ = new ThumbnailModel(loader_, this);
+    filterModel_ = new ThumbnailFilterProxyModel(this);
+    directoryWatcher_ = new QFileSystemWatcher(this);
+    refreshTimer_ = new QTimer(this);
+    recentCandidateTimer_ = new QTimer(this);
     filterModel_->setSourceModel(thumbnailModel_);
-    fileSystemModel_.setFilter(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Drives);
+    fileSystemModel_->setFilter(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Drives);
 #ifdef Q_OS_WIN
     // Invalid root index exposes all native drive roots on Windows.
-    fileSystemModel_.setRootPath(QString{});
+    fileSystemModel_->setRootPath(QString{});
 #else
     // On macOS/Linux, hide the synthetic "/" row and expose its native children directly.
-    fileSystemModel_.setRootPath(QDir::rootPath());
+    fileSystemModel_->setRootPath(QDir::rootPath());
 #endif
 
     QSettings settings;
@@ -171,6 +187,11 @@ BrowseController::BrowseController(std::shared_ptr<const IImageDecoder> decoder,
     connect(QApplication::clipboard(), &QClipboard::dataChanged, this,
             &BrowseController::clipboardStateChanged);
 
+    if (startEmpty) {
+        statusText_ = QStringLiteral("Choose a folder for this file manager");
+        return;
+    }
+
     QString startupDirectory = initialDirectory;
     if (startupDirectory.isEmpty()) {
         startupDirectory =
@@ -184,28 +205,22 @@ BrowseController::BrowseController(std::shared_ptr<const IImageDecoder> decoder,
     openDirectoryInternal(startupDirectory, true);
 }
 
-BrowseController::~BrowseController() {
-    QSettings settings;
-    settings.setValue(QStringLiteral("browser/lastDirectory"), currentDirectory_);
-    settings.setValue(QStringLiteral("browser/recentFolders"), recentFolders_);
-    settings.setValue(QStringLiteral("browser/qmlGridCellWidth"), gridCellWidth_);
-    settings.setValue(QStringLiteral("browser/sortMode"), static_cast<int>(filterModel_->sortMode()));
-}
+BrowseController::~BrowseController() = default;
 
 QAbstractItemModel* BrowseController::thumbnails() const { return filterModel_; }
 
-QAbstractItemModel* BrowseController::folderTree() { return &fileSystemModel_; }
+QAbstractItemModel* BrowseController::folderTree() { return fileSystemModel_; }
 
 QModelIndex BrowseController::folderRootIndex() const {
 #ifdef Q_OS_WIN
     return {};
 #else
-    return fileSystemModel_.index(QDir::rootPath());
+    return fileSystemModel_->index(QDir::rootPath());
 #endif
 }
 
 QModelIndex BrowseController::currentFolderTreeIndex() const {
-    return currentDirectory_.isEmpty() ? QModelIndex{} : fileSystemModel_.index(currentDirectory_);
+    return currentDirectory_.isEmpty() ? QModelIndex{} : fileSystemModel_->index(currentDirectory_);
 }
 
 QString BrowseController::currentFolderName() const {
@@ -261,8 +276,9 @@ bool BrowseController::canEditRaw() const {
 void BrowseController::openDirectory(const QString& path) { openDirectoryInternal(path, true); }
 
 void BrowseController::chooseDirectory() {
+    const QString start = currentDirectory_.isEmpty() ? QDir::homePath() : currentDirectory_;
     const QString path = QFileDialog::getExistingDirectory(
-        QApplication::activeWindow(), QStringLiteral("Open Folder"), currentDirectory_);
+        QApplication::activeWindow(), QStringLiteral("Open Folder"), start);
     if (!path.isEmpty()) {
         openDirectoryInternal(path, true);
     }
@@ -355,10 +371,25 @@ void BrowseController::clearSelection() {
 }
 
 void BrowseController::setFilterText(const QString& text) {
-    filterModel_->setFilterFixedString(text.trimmed());
+    const QString normalized = text.trimmed();
+    if (filterText_ == normalized) {
+        return;
+    }
+    filterText_ = normalized;
+    filterModel_->setFilterFixedString(filterText_);
+    emit filterTextChanged();
     setStatusText(QStringLiteral("%1 visible · %2 selected")
                       .arg(filterModel_->rowCount())
                       .arg(selectedPaths_.size()));
+}
+
+void BrowseController::setDisplayMode(int mode) {
+    const int bounded = std::clamp(mode, 0, 2);
+    if (displayMode_ == bounded) {
+        return;
+    }
+    displayMode_ = bounded;
+    emit displayModeChanged();
 }
 
 void BrowseController::setSortMode(int mode) {
@@ -370,6 +401,7 @@ void BrowseController::setSortMode(int mode) {
         return;
     }
     filterModel_->setSortMode(static_cast<BrowserSortMode>(mode));
+    QSettings().setValue(QStringLiteral("browser/sortMode"), mode);
     emit sortModeChanged();
 }
 
@@ -395,6 +427,9 @@ QString BrowseController::createFolder(const QString& requestedName) {
 }
 
 void BrowseController::refresh() {
+    if (currentDirectory_.isEmpty()) {
+        return;
+    }
     setStatusText(QStringLiteral("Refreshing %1…")
                       .arg(QDir::toNativeSeparators(currentDirectory_)));
     rescanCurrentDirectory();
@@ -410,6 +445,9 @@ void BrowseController::selectAll() {
 }
 
 void BrowseController::openCurrentDirectoryInFileManager() {
+    if (currentDirectory_.isEmpty()) {
+        return;
+    }
     if (!PlatformServices::openDirectoryInFileManager(currentDirectory_)) {
         setStatusText(QStringLiteral("Could not open the system file manager"));
     }
@@ -596,12 +634,6 @@ void BrowseController::compareSelected() {
     emit compareRequested(paths);
 }
 
-void BrowseController::openMultiFolder() {
-    auto* window = new MultiFolderWindow(loader_, currentDirectory_);
-    window->setAttribute(Qt::WA_DeleteOnClose);
-    window->showMaximized();
-}
-
 void BrowseController::editSelectedRawParameters() {
     if (!canEditRaw()) {
         return;
@@ -764,6 +796,7 @@ void BrowseController::setGridCellWidth(int width) {
         return;
     }
     gridCellWidth_ = width;
+    QSettings().setValue(QStringLiteral("browser/qmlGridCellWidth"), gridCellWidth_);
     emit gridCellWidthChanged();
 }
 
@@ -830,6 +863,16 @@ void BrowseController::updateSelection(const QStringList& paths) {
     setStatusText(QStringLiteral("%1 visible · %2 selected")
                       .arg(filterModel_->rowCount())
                       .arg(selectedPaths_.size()));
+}
+
+void BrowseController::setWorkspaceSelectionOrder(const QStringList& paths) {
+    thumbnailModel_->setSelectedPaths(paths);
+}
+
+void BrowseController::setSharedRecentFolders(const QStringList& paths) {
+    if (recentFolders_ == paths) return;
+    recentFolders_ = paths;
+    emit recentFoldersChanged();
 }
 
 void BrowseController::transferPaths(const QStringList& paths, bool move,
