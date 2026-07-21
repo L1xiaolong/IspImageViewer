@@ -109,7 +109,8 @@ jobs:
           package_directory='dist/ISPImageViewer'
           mkdir -p "$package_directory"
           cp "$executable" "$package_directory/ISPImageViewer.exe"
-          windeployqt6 --release --compiler-runtime --no-translations --qmldir src/qml \
+          windeployqt6 --release --compiler-runtime --no-translations \
+            --qmldir build/windows-msys2-release/src/qml/ISPViewQml \
             "$package_directory/ISPImageViewer.exe"
           (
             cd dist
