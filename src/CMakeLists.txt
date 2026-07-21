@@ -5,36 +5,39 @@ add_subdirectory(platform)
 add_subdirectory(ui)
 add_subdirectory(qml)
 
-qt_add_executable(ISPImageViewer
+# Kept as an internal compatibility executable while the QML application below is
+# the product that is shipped.  Giving it a distinct target and artifact name
+# prevents it from accidentally replacing the production QML bundle.
+qt_add_executable(ISPImageViewerWidgetsLegacy
     app/main.cpp
 )
 
 # The executable is the composition root: it creates the production decoder from IO and injects
 # that dependency into the UI. Keep both direct dependencies explicit even though UI also uses IO.
-target_link_libraries(ISPImageViewer PRIVATE ispview_ui ispview_io)
+target_link_libraries(ISPImageViewerWidgetsLegacy PRIVATE ispview_ui ispview_io)
 
 set(_ispview_runtime_icon "${PROJECT_SOURCE_DIR}/assets/brand/app_icon.png")
 if(EXISTS "${_ispview_runtime_icon}")
     set_source_files_properties("${_ispview_runtime_icon}" PROPERTIES
         QT_RESOURCE_ALIAS "brand/app_icon.png")
-    qt_add_resources(ISPImageViewer "ispview_brand_assets"
+    qt_add_resources(ISPImageViewerWidgetsLegacy "ispview_brand_assets"
         PREFIX "/"
         FILES "${_ispview_runtime_icon}"
     )
-    target_compile_definitions(ISPImageViewer PRIVATE ISPVIEW_HAS_BRAND_ICON=1)
+    target_compile_definitions(ISPImageViewerWidgetsLegacy PRIVATE ISPVIEW_HAS_BRAND_ICON=1)
 endif()
 
-set(_ispview_bundle_name "ISP Image Viewer")
-set(_ispview_bundle_identifier "com.ispview.viewer")
+set(_ispview_bundle_name "ISP Image Viewer Widgets Legacy")
+set(_ispview_bundle_identifier "com.ispview.viewer.widgets-legacy")
 if(APPLE AND CMAKE_BUILD_TYPE STREQUAL "Debug")
     # Keep development bundles distinguishable from Release and from old compatibility builds.
     # This lets LaunchServices, Accessibility and UI automation bind the exact executable under
     # test while QSettings still uses the stable application/organization names from main.cpp.
-    set(_ispview_bundle_name "ISP Image Viewer Debug")
-    set(_ispview_bundle_identifier "com.ispview.viewer.debug")
-    set_target_properties(ISPImageViewer PROPERTIES OUTPUT_NAME "ISPImageViewerDebug")
+    set(_ispview_bundle_name "ISP Image Viewer Widgets Legacy Debug")
+    set(_ispview_bundle_identifier "com.ispview.viewer.widgets-legacy.debug")
 endif()
-set_target_properties(ISPImageViewer PROPERTIES
+set_target_properties(ISPImageViewerWidgetsLegacy PROPERTIES
+    OUTPUT_NAME "ISPImageViewerWidgetsLegacy"
     WIN32_EXECUTABLE ON
     MACOSX_BUNDLE ON
     MACOSX_BUNDLE_BUNDLE_NAME "${_ispview_bundle_name}"
@@ -45,22 +48,22 @@ set(_ispview_macos_icon "${PROJECT_SOURCE_DIR}/assets/icons/macos/ISPImageViewer
 if(APPLE AND EXISTS "${_ispview_macos_icon}")
     set_source_files_properties("${_ispview_macos_icon}" PROPERTIES
         MACOSX_PACKAGE_LOCATION "Resources")
-    target_sources(ISPImageViewer PRIVATE "${_ispview_macos_icon}")
-    set_target_properties(ISPImageViewer PROPERTIES
+    target_sources(ISPImageViewerWidgetsLegacy PRIVATE "${_ispview_macos_icon}")
+    set_target_properties(ISPImageViewerWidgetsLegacy PROPERTIES
         MACOSX_BUNDLE_ICON_FILE "ISPImageViewer.icns")
 endif()
 
 set(_ispview_windows_icon "${PROJECT_SOURCE_DIR}/assets/icons/windows/ISPImageViewer.ico")
 if(WIN32 AND EXISTS "${_ispview_windows_icon}")
-    set(_ispview_windows_icon_rc "${CMAKE_CURRENT_BINARY_DIR}/ISPImageViewerIcon.rc")
+    set(_ispview_windows_icon_rc "${CMAKE_CURRENT_BINARY_DIR}/ISPImageViewerWidgetsLegacyIcon.rc")
     file(GENERATE OUTPUT "${_ispview_windows_icon_rc}"
         CONTENT "IDI_ICON1 ICON \"${_ispview_windows_icon}\"\n")
     # Keep the resource compiler target free of Qt include directories. MinGW windres invokes
     # its preprocessor through cmd.exe and can split paths containing spaces even when CMake
     # quotes them (for example D:/Program Files/msys64).
-    add_library(ISPImageViewer_windows_icon OBJECT "${_ispview_windows_icon_rc}")
-    target_sources(ISPImageViewer PRIVATE
-        $<TARGET_OBJECTS:ISPImageViewer_windows_icon>
+    add_library(ISPImageViewerWidgetsLegacy_windows_icon OBJECT "${_ispview_windows_icon_rc}")
+    target_sources(ISPImageViewerWidgetsLegacy PRIVATE
+        $<TARGET_OBJECTS:ISPImageViewerWidgetsLegacy_windows_icon>
     )
 endif()
 
@@ -71,4 +74,4 @@ unset(_ispview_macos_icon)
 unset(_ispview_windows_icon)
 unset(_ispview_windows_icon_rc)
 
-ispview_enable_warnings(ISPImageViewer)
+ispview_enable_warnings(ISPImageViewerWidgetsLegacy)

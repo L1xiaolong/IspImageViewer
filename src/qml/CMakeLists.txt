@@ -68,14 +68,14 @@ target_link_libraries(ISPImageViewerQml PRIVATE
 )
 ispview_enable_warnings(ISPImageViewerQml)
 
-# The preview is intentionally packaged as a separate application while the original Widgets
-# executable remains the production fallback used for functionality regression.
+# This is the production application. The Widgets executable is retained above only as an
+# internal compatibility target and never shares this artifact identity.
 set_target_properties(ISPImageViewerQml PROPERTIES
     WIN32_EXECUTABLE ON
     MACOSX_BUNDLE ON
-    OUTPUT_NAME "ISPImageViewerQmlPreview"
-    MACOSX_BUNDLE_BUNDLE_NAME "ISP Image Viewer QML Preview"
-    MACOSX_BUNDLE_GUI_IDENTIFIER "com.ispview.viewer.qmlpreview"
+    OUTPUT_NAME "ISPImageViewer"
+    MACOSX_BUNDLE_BUNDLE_NAME "ISP Image Viewer"
+    MACOSX_BUNDLE_GUI_IDENTIFIER "com.ispview.viewer"
     MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
     MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${PROJECT_SOURCE_DIR}/dist"
@@ -90,5 +90,20 @@ if(APPLE AND EXISTS "${_ispview_qml_macos_icon}")
         MACOSX_BUNDLE_ICON_FILE "ISPImageViewer.icns")
 endif()
 
+# The QML application is the Windows production executable as well, so embed the
+# same application icon used by the macOS bundle.
+set(_ispview_qml_windows_icon "${PROJECT_SOURCE_DIR}/assets/icons/windows/ISPImageViewer.ico")
+if(WIN32 AND EXISTS "${_ispview_qml_windows_icon}")
+    set(_ispview_qml_windows_icon_rc "${CMAKE_CURRENT_BINARY_DIR}/ISPImageViewerQmlIcon.rc")
+    file(GENERATE OUTPUT "${_ispview_qml_windows_icon_rc}"
+        CONTENT "IDI_ICON1 ICON \"${_ispview_qml_windows_icon}\"\n")
+    add_library(ISPImageViewerQml_windows_icon OBJECT "${_ispview_qml_windows_icon_rc}")
+    target_sources(ISPImageViewerQml PRIVATE
+        $<TARGET_OBJECTS:ISPImageViewerQml_windows_icon>
+    )
+endif()
+
 unset(_ispview_qml_icons)
 unset(_ispview_qml_macos_icon)
+unset(_ispview_qml_windows_icon)
+unset(_ispview_qml_windows_icon_rc)

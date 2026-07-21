@@ -44,7 +44,7 @@ jobs:
         if: runner.os == 'macOS'
         with:
           version: '6.9.0'
-          modules: 'qtshadertools'
+          modules: 'qtshadertools qtquickcontrols2 qtsvg'
           cache: true
 
       - name: Set up MSYS2/UCRT64
@@ -75,9 +75,9 @@ jobs:
         env:
           ASSET_SUFFIX: ${{ matrix.asset_suffix }}
         run: |
-          app_bundle='build/macos-preset-release/src/ISPImageViewer.app'
+          app_bundle='dist/ISPImageViewer.app'
           test -d "$app_bundle"
-          macdeployqt "$app_bundle" -always-overwrite
+          macdeployqt "$app_bundle" -qmldir=src/qml -always-overwrite
           mkdir -p dist
           ditto -c -k --sequesterRsrc --keepParent "$app_bundle" \
             "dist/ISPImageViewer-${RELEASE_TAG}-${ASSET_SUFFIX}.zip"
@@ -101,12 +101,12 @@ jobs:
         env:
           ASSET_SUFFIX: ${{ matrix.asset_suffix }}
         run: |
-          executable='build/windows-msys2-release/ISPImageViewer.exe'
+          executable='dist/ISPImageViewer.exe'
           test -f "$executable"
           package_directory='dist/ISPImageViewer'
           mkdir -p "$package_directory"
           cp "$executable" "$package_directory/ISPImageViewer.exe"
-          windeployqt6 --release --compiler-runtime --no-translations \
+          windeployqt6 --release --compiler-runtime --no-translations --qmldir src/qml \
             "$package_directory/ISPImageViewer.exe"
           (
             cd dist
