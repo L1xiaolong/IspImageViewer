@@ -7,7 +7,6 @@
 #include "io/raw_preset_store.h"
 #include "io/single_file_rename.h"
 #include "platform/platform_services.h"
-#include "ui/compare_window.h"
 #include "ui/file_clipboard.h"
 #include "ui/full_screen_window.h"
 #include "ui/image_properties_panel.h"
@@ -594,9 +593,7 @@ void BrowseController::compareSelected() {
         setStatusText(QStringLiteral("Select 2–4 images to compare"));
         return;
     }
-    auto* window = new CompareWindow(loader_, paths);
-    window->setAttribute(Qt::WA_DeleteOnClose);
-    window->showMaximized();
+    emit compareRequested(paths);
 }
 
 void BrowseController::openMultiFolder() {

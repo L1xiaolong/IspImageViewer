@@ -124,6 +124,7 @@ class BrowseController final : public QObject {
     void sortModeChanged();
     void gridCellWidthChanged();
     void galleryImageChanged();
+    void compareRequested(const QStringList& paths);
 
   private:
     void openDirectoryInternal(const QString& path, bool addToHistory);

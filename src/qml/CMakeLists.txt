@@ -7,6 +7,10 @@ qt_add_executable(ISPImageViewerQml
     browse_controller.cpp
     thumbnail_image_provider.h
     thumbnail_image_provider.cpp
+    qml_image_canvas.h
+    qml_image_canvas.cpp
+    compare_controller.h
+    compare_controller.cpp
 )
 
 qt_add_qml_module(ISPImageViewerQml
@@ -20,9 +24,11 @@ qt_add_qml_module(ISPImageViewerQml
         Isp/AppMenuItem.qml
         Isp/AppMenuSeparator.qml
         Isp/FolderNavigator.qml
+        Isp/HistogramPanel.qml
         Isp/TopToolbar.ui.qml
         Isp/ThumbnailTile.qml
         Pages/BrowsePage.qml
+        Pages/ComparePage.qml
 )
 
 set(_ispview_qml_icons
@@ -49,6 +55,7 @@ set(_ispview_qml_icons
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/star.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/trash.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/more.svg
+    ${PROJECT_SOURCE_DIR}/assets/icons/ui/actual-size.svg
 )
 qt_add_resources(ISPImageViewerQml "ispview_qml_icons"
     PREFIX "/icons/ui"

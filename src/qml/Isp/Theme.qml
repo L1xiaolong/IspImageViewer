@@ -21,5 +21,7 @@ QtObject {
     readonly property int fast: 120
     readonly property int normal: 180
     readonly property string uiFont: Qt.platform.os === "windows" ? "Segoe UI" : ".AppleSystemUIFont"
-    readonly property string monoFont: Qt.platform.os === "windows" ? "Cascadia Mono" : "SF Mono"
+    readonly property string monoFont: Qt.platform.os === "windows"
+                                       ? "Cascadia Mono"
+                                       : Qt.platform.os === "osx" ? "Menlo" : "monospace"
 }

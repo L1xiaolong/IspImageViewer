@@ -34,6 +34,7 @@ qt_add_shaders(ispview_render "ispview_bayer_shaders"
     FILES
         shaders/bayer.frag
         shaders/bayer_compare.frag
+        shaders/qml_side.frag
 )
 
 ispview_enable_warnings(ispview_render)
