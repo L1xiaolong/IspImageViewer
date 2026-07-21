@@ -109,9 +109,16 @@ jobs:
           package_directory='dist/ISPImageViewer'
           mkdir -p "$package_directory"
           cp "$executable" "$package_directory/ISPImageViewer.exe"
+          # MSYS2's windeployqt cannot launch its QML import scanner reliably.
+          # Our QML module is compiled into the executable; deploy the required
+          # Qt runtime and the two Qt-provided QML import trees explicitly.
           windeployqt6 --release --compiler-runtime --no-translations \
-            --qmldir build/windows-msys2-release/src/qml/ISPViewQml \
-            "$package_directory/ISPImageViewer.exe"
+            --no-quick-import "$package_directory/ISPImageViewer.exe"
+          mkdir -p "$package_directory/qml"
+          cp -a /ucrt64/share/qt6/qml/QtQml "$package_directory/qml/"
+          cp -a /ucrt64/share/qt6/qml/QtQuick "$package_directory/qml/"
+          printf '[Paths]\nPrefix = .\nPlugins = plugins\nQmlImports = qml\n' \
+            > "$package_directory/qt.conf"
           (
             cd dist
             zip -r "ISPImageViewer-${RELEASE_TAG}-${ASSET_SUFFIX}.zip" ISPImageViewer
