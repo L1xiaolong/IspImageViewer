@@ -374,6 +374,8 @@ Rectangle {
         activeDirectoryAvailable: root.controller.currentDirectory.length > 0
         canAddPane: root.workspaceController.canAddPane === undefined
                     ? true : root.workspaceController.canAddPane
+        gridEnabled: root.workspaceController.paneCount === undefined ||
+                     root.workspaceController.paneCount <= 2
         galleryEnabled: root.workspaceController.paneCount === undefined ||
                         root.workspaceController.paneCount === 1
         navigationWidth: root.navigatorWidth
@@ -381,18 +383,16 @@ Rectangle {
 
     Connections {
         target: toolbar.gridControl
-        function onClicked() { root.controller.setDisplayMode(0); }
+        function onClicked() { root.workspaceController.setActiveDisplayMode(0); }
     }
     Connections {
         target: toolbar.listControl
-        function onClicked() { root.controller.setDisplayMode(1); }
+        function onClicked() { root.workspaceController.setActiveDisplayMode(1); }
     }
     Connections {
         target: toolbar.galleryControl
         function onClicked() {
-            if (root.workspaceController.paneCount === undefined ||
-                    root.workspaceController.paneCount === 1)
-                root.controller.setDisplayMode(2)
+            root.workspaceController.setActiveDisplayMode(2)
         }
     }
     Connections {
@@ -572,70 +572,9 @@ Rectangle {
             anchors.fill: parent
             sourceComponent: {
                 const count = root.workspaceController.paneCount
-                if (count === 0) return emptyWorkspaceComponent
                 if (count === 1) return singlePaneComponent
                 if (count === 4) return fourPaneComponent
                 return horizontalPanesComponent
-            }
-        }
-    }
-
-    Component {
-        id: emptyWorkspaceComponent
-        Rectangle {
-            color: Theme.sensorWhite
-            border.color: Theme.opticalGray
-            radius: 6
-            Column {
-                anchors.centerIn: parent
-                width: Math.min(parent.width - 40, 340)
-                spacing: 12
-                Image {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: 42
-                    height: 42
-                    source: root.iconPrefix + "folder-pane-plus.svg"
-                    sourceSize: Qt.size(84, 84)
-                    opacity: 0.58
-                }
-                Text {
-                    width: parent.width
-                    text: "No file managers"
-                    horizontalAlignment: Text.AlignHCenter
-                    color: Theme.graphiteInk
-                    font.family: Theme.uiFont
-                    font.pixelSize: 15
-                    font.weight: Font.DemiBold
-                }
-                Text {
-                    width: parent.width
-                    text: "Add a file manager to browse and compare images"
-                    horizontalAlignment: Text.AlignHCenter
-                    color: Theme.mutedInk
-                    font.family: Theme.uiFont
-                    font.pixelSize: 12
-                }
-                Button {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: 150
-                    height: 34
-                    text: "Add file manager"
-                    onClicked: root.workspaceController.addFileManagerPane()
-                    background: Rectangle {
-                        radius: 6
-                        color: parent.down ? "#E2E9ED" : parent.hovered ? "#F1F5F7" : Theme.paperWhite
-                        border.color: Theme.opticalGray
-                    }
-                    contentItem: Text {
-                        text: parent.text
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                        color: Theme.graphiteInk
-                        font.family: Theme.uiFont
-                        font.pixelSize: 12
-                        font.weight: Font.Medium
-                    }
-                }
             }
         }
     }
@@ -656,10 +595,8 @@ Rectangle {
         SplitView {
             id: horizontalSplit
             orientation: Qt.Horizontal
-            function resetEqual() {
-                for (let index = 0; index < paneRepeater.count; ++index)
-                    paneRepeater.itemAt(index).resetSplitWidth()
-            }
+            property int resetGeneration: 0
+            function resetEqual() { resetGeneration += 1 }
             handle: Rectangle {
                 objectName: "horizontalPaneHandle"
                 implicitWidth: 7
@@ -687,7 +624,8 @@ Rectangle {
                     SplitView.preferredWidth: (horizontalSplit.width -
                                                Math.max(0, paneRepeater.count - 1) * 7) /
                                               Math.max(1, paneRepeater.count)
-                    function resetSplitWidth() {
+                    property int observedResetGeneration: horizontalSplit.resetGeneration
+                    onObservedResetGenerationChanged: {
                         SplitView.preferredWidth = (horizontalSplit.width -
                                                     Math.max(0, paneRepeater.count - 1) * 7) /
                                                    Math.max(1, paneRepeater.count)

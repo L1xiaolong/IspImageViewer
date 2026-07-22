@@ -5,6 +5,7 @@
 
 #include <QObject>
 #include <QHash>
+#include <QReadWriteLock>
 #include <QThreadPool>
 #include <QVector>
 
@@ -35,6 +36,9 @@ class ImageLoader final : public QObject {
     [[nodiscard]] static QString cacheKey(const DecodeRequest& request,
                                           const QString& decoderIdentity = {});
 
+  signals:
+    void rawParametersChanged(const QString& path);
+
   private:
     struct PendingRequest {
         quint64 requestId = 0;
@@ -45,6 +49,7 @@ class ImageLoader final : public QObject {
     std::shared_ptr<ThumbnailDiskCache> diskCache_;
     WeightedLruCache<ImageFrame> cache_{512LL * 1024 * 1024};
     QThreadPool pool_;
+    mutable QReadWriteLock rawParametersLock_;
     QHash<QString, RawImageParameters> rawParameters_;
     QHash<QString, QVector<PendingRequest>> inFlight_;
 };

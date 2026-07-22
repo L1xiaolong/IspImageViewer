@@ -59,7 +59,7 @@ Rectangle {
             anchors.rightMargin: 8
             anchors.verticalCenter: parent.verticalCenter
             text: root.controller.currentDirectory.length > 0
-                  ? root.controller.currentFolderName : "New file manager"
+                  ? root.controller.currentDirectory : "New file manager"
             elide: Text.ElideMiddle
             color: Theme.graphiteInk
             font.family: Theme.uiFont
@@ -119,7 +119,8 @@ Rectangle {
             }
             Text {
                 width: parent.width
-                text: root.active ? "Choose a folder from the sidebar"
+                text: blankDropArea.containsDrag ? "Drop to open here"
+                      : root.active ? "Choose a folder from the sidebar"
                                   : "Select this area to choose a folder"
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
@@ -143,12 +144,68 @@ Rectangle {
             anchors.fill: parent
             onClicked: root.activate()
         }
+        DropArea {
+            id: blankDropArea
+            anchors.fill: parent
+            onEntered: function(drag) {
+                if (drag.hasUrls) {
+                    root.activate()
+                    drag.acceptProposedAction()
+                }
+            }
+            onDropped: function(drop) {
+                if (drop.hasUrls) {
+                    root.controller.openDroppedUrls(drop.urls)
+                    drop.acceptProposedAction()
+                }
+            }
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: 7
+                visible: blankDropArea.containsDrag
+                radius: 6
+                color: "#127893A6"
+                border.color: "#7893A6"
+                border.width: 1
+            }
+        }
+    }
+
+    DropArea {
+        id: paneDropArea
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: paneHeader.bottom
+        anchors.bottom: parent.bottom
+        enabled: root.controller.currentDirectory.length > 0
+        onEntered: function(drag) {
+            if (drag.hasUrls) {
+                root.activate()
+                drag.acceptProposedAction()
+            }
+        }
+        onDropped: function(drop) {
+            if (drop.hasUrls) {
+                root.controller.copyDroppedUrls(drop.urls)
+                drop.acceptProposedAction()
+            }
+        }
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 7
+            visible: paneDropArea.containsDrag
+            color: "#0A7893A6"
+            border.color: "#7893A6"
+            border.width: 1
+            radius: 6
+        }
     }
 
     GridView {
         id: contactSheet
         objectName: "paneContactSheet-" + root.paneIndex
         visible: root.controller.currentDirectory.length > 0
+        z: 1
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: paneHeader.bottom
@@ -191,8 +248,7 @@ Rectangle {
                 selected: parent.isSelected
                 selectionOrdinal: parent.selectionOrdinal
                 onSelectionRequested: function(extend, toggle) {
-                    root.activate()
-                    root.controller.selectPath(path, extend, toggle)
+                    root.workspaceController.selectPath(root.paneIndex, path, extend, toggle)
                 }
                 onActivated: {
                     root.activate()
@@ -239,39 +295,6 @@ Rectangle {
                 if (itemIndex < 0 || listBlank) root.controller.clearSelection()
                 mouse.accepted = listBlank
             }
-        }
-    }
-
-    DropArea {
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: paneHeader.bottom
-        anchors.bottom: parent.bottom
-        enabled: root.controller.currentDirectory.length > 0
-        property bool externalDragActive: false
-        onEntered: function(drag) {
-            externalDragActive = drag.source === null && drag.hasUrls
-            if (externalDragActive) {
-                root.activate()
-                drag.acceptProposedAction()
-            }
-        }
-        onExited: externalDragActive = false
-        onDropped: function(drop) {
-            if (drop.source === null && drop.hasUrls) {
-                root.controller.copyDroppedUrls(drop.urls)
-                drop.acceptProposedAction()
-            }
-            externalDragActive = false
-        }
-        Rectangle {
-            anchors.fill: parent
-            anchors.margins: 7
-            visible: parent.externalDragActive
-            color: "#0A7893A6"
-            border.color: "#7893A6"
-            border.width: 1
-            radius: 6
         }
     }
 

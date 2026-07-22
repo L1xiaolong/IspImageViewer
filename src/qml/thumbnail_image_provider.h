@@ -10,12 +10,13 @@
 namespace ispview {
 
 class IImageDecoder;
+class ImageLoader;
 
 // Cross-platform image provider for QML thumbnails. The URL contains only an encoded local path;
 // decoding and RAW/YUV parameter inference stay in the existing IO layer.
 class ThumbnailImageProvider final : public QQuickImageProvider {
   public:
-    explicit ThumbnailImageProvider(std::shared_ptr<const IImageDecoder> decoder);
+    ThumbnailImageProvider(std::shared_ptr<const IImageDecoder> decoder, ImageLoader* loader);
 
     QImage requestImage(const QString& id, QSize* size, const QSize& requestedSize) override;
 
@@ -25,6 +26,7 @@ class ThumbnailImageProvider final : public QQuickImageProvider {
     [[nodiscard]] static QImage placeholder(const QString& text, const QSize& size);
 
     std::shared_ptr<const IImageDecoder> decoder_;
+    ImageLoader* loader_ = nullptr;
     mutable QMutex mutex_;
     QHash<QString, QImage> cache_;
 };

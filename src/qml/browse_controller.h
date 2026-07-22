@@ -110,6 +110,8 @@ class BrowseController final : public QObject {
     Q_INVOKABLE void pasteItems();
     Q_INVOKABLE void pasteItemsInto(const QString& directory);
     Q_INVOKABLE void copyDroppedUrls(const QList<QUrl>& urls);
+    Q_INVOKABLE void copyDroppedUrlsInto(const QList<QUrl>& urls, const QString& directory);
+    Q_INVOKABLE void openDroppedUrls(const QList<QUrl>& urls);
     Q_INVOKABLE void renameSelected();
     Q_INVOKABLE void moveSelectedToTrash();
     Q_INVOKABLE void revealSelected();

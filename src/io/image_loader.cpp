@@ -134,10 +134,21 @@ void ImageLoader::prefetchAdjacentRawFrames(const QString& path, const RawImageP
 void ImageLoader::clearCache() { cache_.clear(); }
 
 void ImageLoader::setRawParameters(const QString& path, const RawImageParameters& parameters) {
-    rawParameters_.insert(QFileInfo(path).absoluteFilePath(), parameters);
+    const QString normalized = QFileInfo(path).absoluteFilePath();
+    {
+        QWriteLocker lock(&rawParametersLock_);
+        const auto existing = rawParameters_.constFind(normalized);
+        if (existing != rawParameters_.cend() &&
+            existing->cacheKey() == parameters.cacheKey()) {
+            return;
+        }
+        rawParameters_.insert(normalized, parameters);
+    }
+    emit rawParametersChanged(normalized);
 }
 
 std::optional<RawImageParameters> ImageLoader::rawParameters(const QString& path) const {
+    const QReadLocker lock(&rawParametersLock_);
     const auto found = rawParameters_.constFind(QFileInfo(path).absoluteFilePath());
     return found == rawParameters_.cend() ? std::nullopt
                                           : std::optional<RawImageParameters>(*found);

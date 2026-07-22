@@ -183,6 +183,31 @@ Item {
         }
     }
 
+    DropArea {
+        id: folderDropArea
+        anchors.fill: parent
+        enabled: root.directory
+        onEntered: function(drag) {
+            if (drag.hasUrls)
+                drag.acceptProposedAction()
+        }
+        onDropped: function(drop) {
+            if (!drop.hasUrls)
+                return
+            root.controller.copyDroppedUrlsInto(drop.urls, root.path)
+            drop.acceptProposedAction()
+        }
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 3
+            visible: folderDropArea.containsDrag
+            radius: Theme.radius
+            color: "#197893A6"
+            border.color: "#7893A6"
+            border.width: 2
+        }
+    }
+
     MouseArea {
         id: tileMouse
         anchors.fill: parent

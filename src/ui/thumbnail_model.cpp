@@ -42,7 +42,12 @@ QPixmap textPlaceholder(const QString& text) {
 ThumbnailModel::ThumbnailModel(ImageLoader* loader, QObject* parent)
     : QAbstractListModel(parent), loader_(loader), placeholder_(textPlaceholder("Loading…")),
       unavailablePlaceholder_(textPlaceholder("Parameters required")),
-      folderPlaceholder_(QApplication::style()->standardIcon(QStyle::SP_DirIcon).pixmap(120, 96)) {}
+      folderPlaceholder_(QApplication::style()->standardIcon(QStyle::SP_DirIcon).pixmap(120, 96)) {
+    connect(loader_, &ImageLoader::rawParametersChanged, this,
+            [this](const QString& path) {
+                if (path != initializingRawParametersPath_) invalidateThumbnail(path);
+            });
+}
 
 int ThumbnailModel::rowCount(const QModelIndex& parent) const {
     return parent.isValid() ? 0 : static_cast<int>(files_.size());
@@ -84,16 +89,23 @@ QVariant ThumbnailModel::data(const QModelIndex& index, int role) const {
                                 : QFileInfo(file.fileName).suffix().toCaseFolded();
     case DimensionsRole:
         return dimensions_.value(file.path);
-    case ThumbnailUrlRole:
+    case ThumbnailUrlRole: {
         if (!file.isDirectory) {
             // Asking for the QML URL also starts the existing asynchronous metadata path. This
             // keeps the technical label updated without moving decode work into QML.
             requestThumbnail(index.row());
         }
-        return file.isDirectory
-                   ? QStringLiteral("qrc:/icons/ui/folder.svg")
-                   : QStringLiteral("image://thumbnail/%1")
-                         .arg(QString::fromLatin1(QUrl::toPercentEncoding(file.path)));
+        if (file.isDirectory) return QStringLiteral("qrc:/icons/ui/folder.svg");
+        QString revision = QStringLiteral("%1-%2")
+                               .arg(file.fileSize)
+                               .arg(file.modifiedAt.toMSecsSinceEpoch());
+        if (const auto parameters = loader_->rawParameters(file.path)) {
+            revision += QLatin1Char('-') + parameters->cacheKey();
+        }
+        return QStringLiteral("image://thumbnail/%1?v=%2")
+            .arg(QString::fromLatin1(QUrl::toPercentEncoding(file.path)),
+                 QString::fromLatin1(QUrl::toPercentEncoding(revision)));
+    }
     case FileNameRole:
         return file.fileName;
     case TechnicalLabelRole: {
@@ -270,7 +282,9 @@ void ThumbnailModel::invalidateThumbnail(const QString& path) {
     const int row = pathToRow_.value(path, -1);
     if (row >= 0) {
         const QModelIndex changed = index(row);
-        emit dataChanged(changed, changed, {Qt::DecorationRole, DimensionsRole});
+        emit dataChanged(changed, changed,
+                         {Qt::DecorationRole, DimensionsRole, ThumbnailUrlRole,
+                          TechnicalLabelRole});
     }
 }
 
@@ -310,7 +324,9 @@ void ThumbnailModel::requestThumbnail(int row) const {
                                                                 {Qt::DecorationRole});
             return;
         }
+        initializingRawParametersPath_ = path;
         loader_->setRawParameters(path, *parameters);
+        initializingRawParametersPath_.clear();
     }
     pending_.insert(path);
     const quint64 requestId = ++requestCounter_;

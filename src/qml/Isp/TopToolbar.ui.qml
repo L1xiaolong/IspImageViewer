@@ -15,6 +15,7 @@ Rectangle {
     property bool activePaneAvailable: true
     property bool activeDirectoryAvailable: true
     property bool canAddPane: true
+    property bool gridEnabled: true
     property bool galleryEnabled: true
     property real navigationWidth: Theme.sidebarWidth
 
@@ -106,9 +107,9 @@ Rectangle {
         height: 36
         checkable: true
         checked: root.displayMode === 0
-        enabled: root.activePaneAvailable && root.activeDirectoryAvailable
+        enabled: root.activePaneAvailable && root.activeDirectoryAvailable && root.gridEnabled
         iconSource: root.iconPrefix + "grid.svg"
-        toolTipText: "Grid view"
+        toolTipText: root.gridEnabled ? "Grid view" : "Grid view is available with up to 2 file managers"
     }
 
     AppIconButton {
@@ -136,7 +137,7 @@ Rectangle {
         checked: root.displayMode === 2
         enabled: root.activePaneAvailable && root.activeDirectoryAvailable && root.galleryEnabled
         iconSource: root.iconPrefix + "gallery.svg"
-        toolTipText: "Gallery view"
+        toolTipText: root.galleryEnabled ? "Gallery view" : "Gallery view is available with 1 file manager"
     }
 
     Rectangle {

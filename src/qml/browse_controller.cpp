@@ -482,13 +482,42 @@ void BrowseController::pasteItemsInto(const QString& directory) {
 }
 
 void BrowseController::copyDroppedUrls(const QList<QUrl>& urls) {
+    copyDroppedUrlsInto(urls, currentDirectory_);
+}
+
+void BrowseController::copyDroppedUrlsInto(const QList<QUrl>& urls, const QString& directory) {
     QStringList paths;
     for (const QUrl& url : urls) {
         if (url.isLocalFile()) {
             paths.append(url.toLocalFile());
         }
     }
-    transferPaths(paths, false);
+    transferPaths(paths, false, directory);
+}
+
+void BrowseController::openDroppedUrls(const QList<QUrl>& urls) {
+    QStringList localPaths;
+    for (const QUrl& url : urls) {
+        if (url.isLocalFile()) localPaths.append(QFileInfo(url.toLocalFile()).absoluteFilePath());
+    }
+    for (const QString& path : std::as_const(localPaths)) {
+        if (QFileInfo(path).isDir()) {
+            openDirectoryInternal(path, true);
+            return;
+        }
+    }
+
+    QString targetDirectory;
+    QStringList images;
+    for (const QString& path : std::as_const(localPaths)) {
+        const QFileInfo info(path);
+        if (!info.isFile() || !DirectoryScanner::isSupportedImageFile(path)) continue;
+        if (targetDirectory.isEmpty()) targetDirectory = info.absolutePath();
+        if (info.absolutePath() == targetDirectory) images.append(info.absoluteFilePath());
+    }
+    if (targetDirectory.isEmpty()) return;
+    openDirectoryInternal(targetDirectory, true);
+    updateSelection(images);
 }
 
 void BrowseController::renameSelected() {

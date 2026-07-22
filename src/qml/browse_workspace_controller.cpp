@@ -94,15 +94,10 @@ void BrowseWorkspaceController::synchronizeRecentFolders(BrowseController* sourc
 void BrowseWorkspaceController::addFileManagerPane() {
     if (!canAddPane()) return;
     panes_.append(createPane({}, true));
-    if (panes_.size() == 2) {
-        for (BrowseController* pane : panes_)
-            if (pane->displayMode() == 2) pane->setDisplayMode(0);
-    }
-    if (activePaneIndex_ < 0) {
-        activePaneIndex_ = 0;
-        emit activePaneChanged();
-    }
+    activePaneIndex_ = static_cast<int>(panes_.size()) - 1;
+    normalizeDisplayModes();
     emit panesChanged();
+    emit activePaneChanged();
     emit statusTextChanged();
 }
 
@@ -115,6 +110,17 @@ void BrowseWorkspaceController::activatePane(int index) {
 
 void BrowseWorkspaceController::closePane(int index) {
     if (index < 0 || index >= panes_.size()) return;
+    if (panes_.size() == 1) {
+        BrowseController* removed = panes_.takeFirst();
+        panes_.append(createPane({}, true));
+        activePaneIndex_ = 0;
+        removed->deleteLater();
+        recomputeSelection();
+        emit panesChanged();
+        emit activePaneChanged();
+        emit statusTextChanged();
+        return;
+    }
     const int previousActiveIndex = activePaneIndex_;
     BrowseController* removed = panes_.takeAt(index);
     const bool closedActive = activePaneIndex_ == index;
@@ -126,10 +132,45 @@ void BrowseWorkspaceController::closePane(int index) {
         --activePaneIndex_;
     }
     removed->deleteLater();
+    normalizeDisplayModes();
     recomputeSelection();
     emit panesChanged();
     if (closedActive || activePaneIndex_ != previousActiveIndex) emit activePaneChanged();
     emit statusTextChanged();
+}
+
+void BrowseWorkspaceController::selectPath(int paneIndex, const QString& path, bool extend,
+                                           bool toggle) {
+    if (paneIndex < 0 || paneIndex >= panes_.size() || path.isEmpty()) return;
+    if (!toggle) {
+        for (int index = 0; index < panes_.size(); ++index) {
+            if (index != paneIndex) panes_.at(index)->clearSelection();
+        }
+    }
+    activatePane(paneIndex);
+    panes_.at(paneIndex)->selectPath(path, extend, toggle);
+}
+
+void BrowseWorkspaceController::setActiveDisplayMode(int mode) {
+    BrowseController* active = activeBrowsePane();
+    if (!active) return;
+    if (panes_.size() >= 3) {
+        active->setDisplayMode(1);
+        return;
+    }
+    if (panes_.size() == 2 && mode == 2) return;
+    active->setDisplayMode(mode);
+}
+
+void BrowseWorkspaceController::normalizeDisplayModes() {
+    if (panes_.size() >= 3) {
+        for (BrowseController* pane : panes_) pane->setDisplayMode(1);
+        return;
+    }
+    if (panes_.size() == 2) {
+        for (BrowseController* pane : panes_)
+            if (pane->displayMode() == 2) pane->setDisplayMode(0);
+    }
 }
 
 void BrowseWorkspaceController::compareSelected() {

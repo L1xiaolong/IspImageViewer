@@ -58,6 +58,7 @@ class ThumbnailModel final : public QAbstractListModel {
     mutable QHash<QString, QSize> dimensions_;
     mutable QSet<QString> pending_;
     mutable QHash<QString, quint64> pendingRequestIds_;
+    mutable QString initializingRawParametersPath_;
     QStringList selectedPaths_;
     mutable quint64 requestCounter_ = 0;
     QPixmap placeholder_;

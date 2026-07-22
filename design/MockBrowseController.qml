@@ -236,6 +236,12 @@ QtObject {
     function copyDroppedUrls(urls) {
         statusText = urls.length + " dropped item(s)";
     }
+    function copyDroppedUrlsInto(urls, path) {
+        statusText = urls.length + " item(s) dropped into " + String(path).split("/").pop();
+    }
+    function openDroppedUrls(urls) {
+        statusText = urls.length + " dropped item(s) opened";
+    }
     function renameSelected() {
         statusText = "Rename preview";
     }

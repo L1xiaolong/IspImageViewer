@@ -2,6 +2,7 @@
 
 #include "core/raw_image_parameters.h"
 #include "io/image_decoder.h"
+#include "io/image_loader.h"
 #include "io/raw_preset_store.h"
 
 #include <QFileInfo>
@@ -11,14 +12,16 @@
 
 namespace ispview {
 
-ThumbnailImageProvider::ThumbnailImageProvider(std::shared_ptr<const IImageDecoder> decoder)
-    : QQuickImageProvider(QQuickImageProvider::Image), decoder_(std::move(decoder)) {}
+ThumbnailImageProvider::ThumbnailImageProvider(std::shared_ptr<const IImageDecoder> decoder,
+                                               ImageLoader* loader)
+    : QQuickImageProvider(QQuickImageProvider::Image), decoder_(std::move(decoder)),
+      loader_(loader) {}
 
 QImage ThumbnailImageProvider::requestImage(const QString& id, QSize* size,
                                             const QSize& requestedSize) {
     const QString path = QUrl::fromPercentEncoding(id.section(QLatin1Char('?'), 0, 0).toUtf8());
     const QSize target = requestedSize.isValid() ? requestedSize : QSize(320, 240);
-    const QString key = QStringLiteral("%1|%2x%3").arg(path).arg(target.width()).arg(target.height());
+    const QString key = QStringLiteral("%1|%2x%3").arg(id).arg(target.width()).arg(target.height());
     {
         const QMutexLocker lock(&mutex_);
         if (const auto it = cache_.constFind(key); it != cache_.cend()) {
@@ -55,7 +58,8 @@ QImage ThumbnailImageProvider::decode(const QString& path, QSize* sourceSize,
     std::optional<RawImageParameters> parameters;
     const QString suffix = QFileInfo(path).suffix().toLower();
     if (suffix == QStringLiteral("raw") || suffix == QStringLiteral("yuv")) {
-        parameters = RawPresetStore::loadForFile(path);
+        if (loader_) parameters = loader_->rawParameters(path);
+        if (!parameters) parameters = RawPresetStore::loadForFile(path);
         if (!parameters) {
             parameters = RawPresetStore::inferFromFileName(path);
         }

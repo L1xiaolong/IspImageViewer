@@ -19,7 +19,8 @@ Rectangle {
     clip: true
 
     function revealCurrentFolder() {
-        if (root.designMode || root.controller.currentFolderTreeIndex === undefined)
+        if (root.designMode || root.controller.currentDirectory.length === 0 ||
+                root.controller.currentFolderTreeIndex === undefined)
             return
         folderTree.expandToIndex(root.controller.currentFolderTreeIndex)
     }

@@ -53,6 +53,9 @@ class BrowseWorkspaceController final : public QObject {
     Q_INVOKABLE void addFileManagerPane();
     Q_INVOKABLE void activatePane(int index);
     Q_INVOKABLE void closePane(int index);
+    Q_INVOKABLE void selectPath(int paneIndex, const QString& path, bool extend = false,
+                                bool toggle = false);
+    Q_INVOKABLE void setActiveDisplayMode(int mode);
     Q_INVOKABLE void compareSelected();
 
   signals:
@@ -67,6 +70,7 @@ class BrowseWorkspaceController final : public QObject {
     void recomputeSelection();
     void connectPane(BrowseController* pane);
     void synchronizeRecentFolders(BrowseController* source);
+    void normalizeDisplayModes();
 
     ImageLoader* loader_ = nullptr;
     QFileSystemModel* folderTreeModel_ = nullptr;

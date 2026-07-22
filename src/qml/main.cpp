@@ -78,7 +78,8 @@ int main(int argc, char* argv[]) {
     engine.rootContext()->setContextProperty(QStringLiteral("compareController"), &compareController);
     engine.rootContext()->setContextProperty(QStringLiteral("initialComparePaths"), initialComparePaths);
     engine.addImageProvider(QStringLiteral("thumbnail"),
-                            new ispview::ThumbnailImageProvider(decoder));
+                            new ispview::ThumbnailImageProvider(decoder,
+                                                                browseController.loader()));
     engine.load(QUrl(QStringLiteral("qrc:/ISPViewQml/Main.qml")));
     if (engine.rootObjects().isEmpty()) {
         return 1;
@@ -88,10 +89,7 @@ int main(int argc, char* argv[]) {
         const int mode = displayMode == QStringLiteral("list")
                              ? 1
                              : displayMode == QStringLiteral("gallery") ? 2 : 0;
-        if (QObject* page = engine.rootObjects().constFirst()->findChild<QObject*>(
-                QStringLiteral("browsePage"))) {
-            page->setProperty("displayMode", mode);
-        }
+        browseController.setActiveDisplayMode(mode);
     }
 
     if (!selectedPath.isEmpty()) {

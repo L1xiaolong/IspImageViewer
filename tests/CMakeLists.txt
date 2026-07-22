@@ -37,8 +37,12 @@ qt_add_executable(ispview_qml_workspace_tests
     ../src/qml/browse_controller.cpp
     ../src/qml/browse_workspace_controller.h
     ../src/qml/browse_workspace_controller.cpp
+    ../src/qml/thumbnail_image_provider.h
+    ../src/qml/thumbnail_image_provider.cpp
 )
-target_link_libraries(ispview_qml_workspace_tests PRIVATE ispview_ui ispview_io Qt6::Test)
+target_link_libraries(ispview_qml_workspace_tests PRIVATE
+    ispview_ui ispview_io Qt6::Quick Qt6::Test
+)
 target_compile_definitions(ispview_qml_workspace_tests PRIVATE
     ISPVIEW_HAS_LIBRAW=$<BOOL:${ISPVIEW_HAS_LIBRAW}>
 )

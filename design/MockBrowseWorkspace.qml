@@ -3,7 +3,7 @@ import QtQuick
 QtObject {
     id: root
 
-    // Change this value from 0 through 4 in Design Studio to inspect every
+    // Change this value from 1 through 4 in Design Studio to inspect every
     // production workspace geometry without substituting a design-only page.
     property int paneCount: 3
     property int activePaneIndex: paneCount > 0 ? Math.min(0, paneCount - 1) : -1
@@ -52,12 +52,9 @@ QtObject {
     function addFileManagerPane() {
         if (!canAddPane)
             return;
-        if (paneCount === 1 && pane0.displayMode === 2)
-            pane0.setDisplayMode(0);
         paneCount += 1;
-        if (activePaneIndex < 0) {
-            activePaneIndex = 0;
-        }
+        activePaneIndex = paneCount - 1;
+        normalizeDisplayModes();
         refreshOrdinals();
     }
 
@@ -65,25 +62,68 @@ QtObject {
         if (index < 0 || index >= paneCount || activePaneIndex === index)
             return;
         activePaneIndex = index;
-        activePaneChanged();
     }
 
     function closePane(index) {
         if (index < 0 || index >= paneCount)
             return;
+        if (paneCount === 1) {
+            panes[0].currentDirectory = "";
+            panes[0].currentFolderName = "";
+            panes[0].clearSelection();
+            panes[0].statusText = "Choose a folder for this file manager";
+            activePaneIndex = 0;
+            return;
+        }
         const order = paneOrder.slice();
         const removed = order.splice(index, 1)[0];
         order.push(removed);
         paneOrder = order;
         const closedActive = activePaneIndex === index;
         paneCount -= 1;
-        if (paneCount === 0)
-            activePaneIndex = -1;
-        else if (closedActive)
+        if (closedActive)
             activePaneIndex = Math.min(index, paneCount - 1);
         else if (index < activePaneIndex)
             activePaneIndex -= 1;
         refreshOrdinals();
+    }
+
+    function selectPath(paneIndex, path, extend, toggle) {
+        if (paneIndex < 0 || paneIndex >= paneCount)
+            return;
+        if (!toggle) {
+            for (let index = 0; index < paneCount; ++index) {
+                if (index !== paneIndex)
+                    panes[index].clearSelection();
+            }
+        }
+        activatePane(paneIndex);
+        panes[paneIndex].selectPath(path, extend, toggle);
+        refreshOrdinals();
+    }
+
+    function setActiveDisplayMode(mode) {
+        if (!hasActivePane)
+            return;
+        if (paneCount >= 3) {
+            activePane.setDisplayMode(1);
+            return;
+        }
+        if (paneCount === 2 && mode === 2)
+            return;
+        activePane.setDisplayMode(mode);
+    }
+
+    function normalizeDisplayModes() {
+        if (paneCount >= 3) {
+            for (let index = 0; index < paneCount; ++index)
+                panes[index].setDisplayMode(1);
+        } else if (paneCount === 2) {
+            for (let index = 0; index < paneCount; ++index) {
+                if (panes[index].displayMode === 2)
+                    panes[index].setDisplayMode(0);
+            }
+        }
     }
 
     function compareSelected() {
@@ -115,5 +155,16 @@ QtObject {
         selectedPaths: []
     }
 
-    Component.onCompleted: refreshOrdinals()
+    onPaneCountChanged: {
+        if (paneCount < 1) {
+            paneCount = 1;
+            return;
+        }
+        normalizeDisplayModes();
+        refreshOrdinals();
+    }
+    Component.onCompleted: {
+        normalizeDisplayModes();
+        refreshOrdinals();
+    }
 }
