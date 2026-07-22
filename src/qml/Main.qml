@@ -39,6 +39,7 @@ ApplicationWindow {
     ComparePage {
         id: comparePage
         objectName: "comparePage"
+        controller: compareController
         anchors.fill: parent
         visible: window.showingCompare
         onCloseRequested: window.showingCompare = false

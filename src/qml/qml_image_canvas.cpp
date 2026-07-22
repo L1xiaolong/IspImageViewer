@@ -582,7 +582,7 @@ class Renderer final : public QQuickRhiItemRenderer {
         updates->updateDynamicBuffer(compareUniform_.get(), 0, 32, compareValues.data());
 
         const QSize outputSize = renderTarget()->pixelSize();
-        commandBuffer->beginPass(renderTarget(), QColor(30, 32, 36), {1.F, 0}, updates);
+        commandBuffer->beginPass(renderTarget(), QColor(160, 160, 160, 255), {1.F, 0}, updates);
         commandBuffer->setViewport(
             QRhiViewport(0, 0, static_cast<float>(outputSize.width()),
                          static_cast<float>(outputSize.height())));
@@ -648,7 +648,7 @@ QmlImageCanvas::QmlImageCanvas(QQuickItem* parent) : QQuickRhiItem(parent) {
 }
 
 void QmlImageCanvas::setPresentationMode(int mode) {
-    const int bounded = std::clamp(mode, 0, 2);
+    const int bounded = std::clamp(mode, 0, 1);
     if (presentationMode_ == bounded) return;
     presentationMode_ = bounded;
     dividerDragging_ = false;
@@ -746,8 +746,8 @@ QVariantMap QmlImageCanvas::navigationState(int slot) const {
     const ViewState state = effectiveViewState(slot);
     if (!frame || imageSize.isEmpty() || cell.isEmpty() || state.fitMode == FitMode::Fit)
         return {{QStringLiteral("visible"), false}};
-    const int availableWidth = std::max(48, std::min(180, qRound(cell.width()) / 3));
-    const int availableHeight = std::max(36, std::min(130, qRound(cell.height()) / 3));
+    const int availableWidth = std::max(24, std::min(90, qRound(cell.width()) / 6));
+    const int availableHeight = std::max(18, std::min(65, qRound(cell.height()) / 6));
     const QSize contentSize = imageSize.scaled(availableWidth, availableHeight,
                                                Qt::KeepAspectRatio);
     const double percent = state.pixelsPerImagePixel * 100.0;
@@ -756,8 +756,8 @@ QVariantMap QmlImageCanvas::navigationState(int slot) const {
         : QStringLiteral("%1%").arg(QString::number(percent, 'f', 1));
     return {
         {QStringLiteral("visible"), true},
-        {QStringLiteral("width"), contentSize.width() + 10},
-        {QStringLiteral("height"), contentSize.height() + 10},
+        {QStringLiteral("width"), contentSize.width() + 6},
+        {QStringLiteral("height"), contentSize.height() + 6},
         {QStringLiteral("viewport"), ViewTransform::visibleNormalizedRect(
              QSize(qRound(cell.width()), qRound(cell.height())), imageSize, state)},
         {QStringLiteral("zoom"), zoom},
@@ -769,14 +769,16 @@ void QmlImageCanvas::notifyNavigationChanged() {
     emit navigationRevisionChanged();
 }
 
-void QmlImageCanvas::setViewState(int slot, const ViewState& state, bool notify) {
+void QmlImageCanvas::setViewState(int slot, const ViewState& state, bool notify,
+                                  bool synchronizeViews) {
     if (slot < 0 || slot >= viewStates_.size()) return;
+    const ViewState previousSource = effectiveViewState(slot);
     viewStates_[slot] = state;
-    if (synchronized_) {
+    if (synchronized_ && synchronizeViews) {
         for (int target = 0; target < viewStates_.size(); ++target) {
             if (target == slot || !frames_.value(target)) continue;
-            viewStates_[target] =
-                syncGroup_.synchronizedState(state, effectiveViewState(target));
+            viewStates_[target] = syncGroup_.relativelySynchronizedState(
+                previousSource, state, effectiveViewState(target));
         }
     }
     if (notify) emit viewStateChanged(slot, effectiveViewState(slot));
@@ -867,9 +869,12 @@ void QmlImageCanvas::wheelEvent(QWheelEvent* event) {
     const double scale = state.pixelsPerImagePixel *
                          std::pow(1.2, event->angleDelta().y() / 120.0);
     const QPointF local = event->position() - cell.topLeft();
-    setViewState(slot, ViewTransform::zoomAt(
-                           state, scale, local,
-                           QSize(qRound(cell.width()), qRound(cell.height())), imageSize));
+    const bool controlHeld = event->modifiers().testFlag(Qt::ControlModifier);
+    setViewState(slot,
+                 ViewTransform::zoomAt(state, scale, local,
+                                       QSize(qRound(cell.width()), qRound(cell.height())),
+                                       imageSize),
+                 true, !controlHeld);
     event->accept();
 }
 
@@ -902,9 +907,11 @@ void QmlImageCanvas::mouseMoveEvent(QMouseEvent* event) {
     }
     if (dragging_ && activeSlot_ >= 0) {
         const ViewState state = effectiveViewState(activeSlot_);
-        setViewState(activeSlot_, ViewTransform::panBy(
-                                      state, event->position() - lastMousePosition_,
-                                      logicalImageSize(activeSlot_)));
+        const bool controlHeld = event->modifiers().testFlag(Qt::ControlModifier);
+        setViewState(activeSlot_,
+                     ViewTransform::panBy(state, event->position() - lastMousePosition_,
+                                          logicalImageSize(activeSlot_)),
+                     true, !controlHeld);
         lastMousePosition_ = event->position();
         event->accept();
         return;

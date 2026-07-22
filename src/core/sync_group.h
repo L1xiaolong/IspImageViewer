@@ -16,6 +16,9 @@ class SyncGroup final {
 
     [[nodiscard]] ViewState synchronizedState(const ViewState& source,
                                               const ViewState& target) const;
+    [[nodiscard]] ViewState relativelySynchronizedState(const ViewState& previousSource,
+                                                        const ViewState& source,
+                                                        const ViewState& target) const;
 
   private:
     bool syncZoom_ = true;

@@ -26,8 +26,8 @@ qt_add_qml_module(ISPImageViewerQml
         Isp/AppMenuItem.qml
         Isp/AppMenuSeparator.qml
         Isp/BrowserPane.qml
+        Isp/CompareLumaHistogram.qml
         Isp/FolderNavigator.qml
-        Isp/HistogramPanel.qml
         Isp/TopToolbar.ui.qml
         Isp/ThumbnailTile.qml
         Pages/BrowsePage.qml
@@ -62,6 +62,13 @@ set(_ispview_qml_icons
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/trash.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/more.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/actual-size.svg
+    ${PROJECT_SOURCE_DIR}/assets/icons/ui/side-by-side.svg
+    ${PROJECT_SOURCE_DIR}/assets/icons/ui/split-vertical.svg
+    ${PROJECT_SOURCE_DIR}/assets/icons/ui/fit.svg
+    ${PROJECT_SOURCE_DIR}/assets/icons/ui/exif.svg
+    ${PROJECT_SOURCE_DIR}/assets/icons/ui/histogram.svg
+    ${PROJECT_SOURCE_DIR}/assets/icons/ui/pixel-probe.svg
+    ${PROJECT_SOURCE_DIR}/assets/icons/ui/screenshot.svg
 )
 qt_add_resources(ISPImageViewerQml "ispview_qml_icons"
     PREFIX "/icons/ui"

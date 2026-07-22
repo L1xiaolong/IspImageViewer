@@ -2,6 +2,8 @@
 #include "io/image_loader.h"
 #include "qml/browse_controller.h"
 #include "qml/browse_workspace_controller.h"
+#include "qml/compare_controller.h"
+#include "qml/qml_image_canvas.h"
 #include "qml/thumbnail_image_provider.h"
 #include "ui/thumbnail_model.h"
 
@@ -9,11 +11,13 @@
 #include <QDir>
 #include <QFile>
 #include <QUrl>
+#include <QWheelEvent>
 #include <QSettings>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <cmath>
 #include <memory>
 
 namespace ispview {
@@ -63,6 +67,9 @@ class QmlWorkspaceControllerTests final : public QObject {
     void copiesDropsIntoSubfoldersAndAcrossPanes();
     void emptyPaneOpensDroppedFoldersAndImageLocations();
     void rawParametersRefreshEveryPaneAndQmlProvider();
+    void comparePreferencesPersistAndHorizontalModeIsUnavailable();
+    void compareUsesCompactRgbaPixelTextAndLumaOnlyHistogram();
+    void compareViewSyncTemporarilyBypassesWithControl();
 };
 
 void QmlWorkspaceControllerTests::initTestCase() {
@@ -308,6 +315,116 @@ void QmlWorkspaceControllerTests::rawParametersRefreshEveryPaneAndQmlProvider() 
     QImage refreshedImage = provider.requestImage(encodedPath + QStringLiteral("?v=second"),
                                                   nullptr, QSize(16, 16));
     QCOMPARE(refreshedImage.pixelColor(0, 0), QColor(Qt::green));
+}
+
+void QmlWorkspaceControllerTests::comparePreferencesPersistAndHorizontalModeIsUnavailable() {
+    QSettings settings;
+    settings.remove(QStringLiteral("compare"));
+
+    CompareController first(nullptr);
+    QVERIFY(first.fileInformationVisible());
+    QVERIFY(!first.exifVisible());
+    QVERIFY(!first.histogramVisible());
+    QVERIFY(!first.pixelValueVisible());
+
+    first.setFileInformationVisible(false);
+    first.setExifVisible(true);
+    first.setHistogramVisible(true);
+    first.setPixelValueVisible(true);
+    first.setPresentationMode(2);
+    QCOMPARE(first.presentationMode(), 1);
+
+    CompareController restored(nullptr);
+    QVERIFY(!restored.fileInformationVisible());
+    QVERIFY(restored.exifVisible());
+    QVERIFY(restored.histogramVisible());
+    QVERIFY(restored.pixelValueVisible());
+}
+
+void QmlWorkspaceControllerTests::compareUsesCompactRgbaPixelTextAndLumaOnlyHistogram() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("rgba.png"));
+    QImage image(2, 2, QImage::Format_RGBA8888);
+    image.fill(QColor(10, 20, 30, 40));
+    QVERIFY(image.save(path));
+
+    BrowseWorkspaceController workspace(std::make_shared<QtImageDecoder>(), directory.path());
+    CompareController compare(workspace.loader());
+    QSignalSpy frameSpy(&compare, &CompareController::frameChanged);
+    compare.setPaths({path, path});
+    QTRY_VERIFY_WITH_TIMEOUT(frameSpy.size() >= 2, 5000);
+
+    const QVariantList values = compare.pixelTexts(0, 0, 0);
+    QCOMPARE(values.size(), 2);
+    QCOMPARE(values.at(0).toString(), QStringLiteral("(0,0) RGBA(10,20,30,40)"));
+    QVERIFY(!values.at(0).toString().contains(QStringLiteral("RAW")));
+    QVERIFY(!values.at(0).toString().contains(QStringLiteral("YUV")));
+    QVERIFY(!values.at(0).toString().contains(QChar(0x2022)));
+
+    QSignalSpy histogramSpy(&compare, &CompareController::histogramChanged);
+    compare.requestHistogram(0);
+    QTRY_VERIFY_WITH_TIMEOUT(!histogramSpy.isEmpty(), 5000);
+    const QVariantMap histogram = compare.histogram(0);
+    QVERIFY(histogram.value(QStringLiteral("valid")).toBool());
+    const QVariantList channels = histogram.value(QStringLiteral("channels")).toList();
+    QCOMPARE(channels.size(), 1);
+    QCOMPARE(channels.constFirst().toMap().value(QStringLiteral("name")).toString(),
+             QStringLiteral("Luma"));
+    QVERIFY(!histogram.contains(QStringLiteral("summary")));
+}
+
+void QmlWorkspaceControllerTests::compareViewSyncTemporarilyBypassesWithControl() {
+    const auto makeFrame = [] {
+        auto frame = std::make_shared<ImageFrame>();
+        QImage image(100, 100, QImage::Format_RGBA8888);
+        image.fill(Qt::black);
+        frame->descriptor.size = image.size();
+        frame->storage = std::move(image);
+        return frame;
+    };
+
+    QmlImageCanvas canvas;
+    canvas.setWidth(400);
+    canvas.setHeight(200);
+    canvas.setFrames({makeFrame(), makeFrame()});
+    canvas.setSynchronized(true);
+    canvas.setPresentationMode(2);
+    QCOMPARE(canvas.presentationMode(), 1);
+    canvas.setPresentationMode(0);
+    canvas.fitAll();
+
+    const double fittedScale = canvas.effectiveViewState(0).pixelsPerImagePixel;
+    QWheelEvent synchronizedWheel(QPointF(50, 100), QPointF(50, 100), {}, QPoint(0, 120),
+                                  Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+    QCoreApplication::sendEvent(&canvas, &synchronizedWheel);
+    QVERIFY(canvas.effectiveViewState(0).pixelsPerImagePixel > fittedScale);
+    QCOMPARE(canvas.effectiveViewState(0).pixelsPerImagePixel,
+             canvas.effectiveViewState(1).pixelsPerImagePixel);
+
+    canvas.fitAll();
+    QWheelEvent independentWheel(QPointF(50, 100), QPointF(50, 100), {}, QPoint(0, 120),
+                                 Qt::NoButton, Qt::ControlModifier, Qt::NoScrollPhase, false);
+    QCoreApplication::sendEvent(&canvas, &independentWheel);
+    const double independentlyAdjustedScale =
+        canvas.effectiveViewState(0).pixelsPerImagePixel;
+    const double unchangedScale = canvas.effectiveViewState(1).pixelsPerImagePixel;
+    QVERIFY(independentlyAdjustedScale > fittedScale);
+    QCOMPARE(unchangedScale, fittedScale);
+    const double independentRatio = independentlyAdjustedScale / unchangedScale;
+
+    QWheelEvent resumedWheel(QPointF(50, 100), QPointF(50, 100), {}, QPoint(0, 120),
+                             Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+    QCoreApplication::sendEvent(&canvas, &resumedWheel);
+    QVERIFY(canvas.effectiveViewState(0).pixelsPerImagePixel > independentlyAdjustedScale);
+    QVERIFY(canvas.effectiveViewState(1).pixelsPerImagePixel > unchangedScale);
+    const double resumedRatio = canvas.effectiveViewState(0).pixelsPerImagePixel
+                                / canvas.effectiveViewState(1).pixelsPerImagePixel;
+    QVERIFY(std::abs(resumedRatio - independentRatio) < 0.000001);
+    const QVariantMap navigation = canvas.navigationState(0);
+    QVERIFY(navigation.value(QStringLiteral("visible")).toBool());
+    QVERIFY(navigation.value(QStringLiteral("width")).toInt() <= 96);
+    QVERIFY(navigation.value(QStringLiteral("height")).toInt() <= 71);
 }
 
 } // namespace ispview

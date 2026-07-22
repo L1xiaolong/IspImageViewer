@@ -4,7 +4,6 @@
 #include "core/comparison_pixel_probe.h"
 #include "core/display_histogram.h"
 #include "core/raw_plane_access.h"
-#include "core/raw_plane_histogram.h"
 #include "io/image_loader.h"
 #include "io/raw_preset_store.h"
 
@@ -13,9 +12,9 @@
 #include <QDateTime>
 #include <QFileDialog>
 #include <QGuiApplication>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QThreadPool>
-#include <QLocale>
 
 #include <algorithm>
 
@@ -57,44 +56,13 @@ QVariantMap displayHistogramMap(const DisplayHistogram& histogram) {
     if (!histogram.isValid()) return {{QStringLiteral("valid"), false}, {QStringLiteral("summary"), QStringLiteral("Display histogram unavailable")}};
     QVariantList channels;
     const quint64 samples = static_cast<quint64>(std::max<qint64>(0, histogram.sampledPixelCount));
-    channels << histogramChannel(QStringLiteral("Luma"), QStringLiteral("#25303A"), histogram.luma.bins, samples, histogram.luma.mean, histogram.luma.standardDeviation, histogram.luma.minimum, histogram.luma.maximum)
-             << histogramChannel(QStringLiteral("Red"), QStringLiteral("#CE5B5B"), histogram.red.bins, samples, histogram.red.mean, histogram.red.standardDeviation, histogram.red.minimum, histogram.red.maximum)
-             << histogramChannel(QStringLiteral("Green"), QStringLiteral("#43A86A"), histogram.green.bins, samples, histogram.green.mean, histogram.green.standardDeviation, histogram.green.minimum, histogram.green.maximum)
-             << histogramChannel(QStringLiteral("Blue"), QStringLiteral("#4776C9"), histogram.blue.bins, samples, histogram.blue.mean, histogram.blue.standardDeviation, histogram.blue.minimum, histogram.blue.maximum);
-    QString summary = QStringLiteral("Full display · %1×%2 · %3 samples")
-        .arg(histogram.analyzedSize.width()).arg(histogram.analyzedSize.height())
-        .arg(QLocale().toString(histogram.sampledPixelCount));
-    if (histogram.usesDisplayProxy()) summary += QStringLiteral(" · proxy for %1×%2").arg(histogram.logicalSize.width()).arg(histogram.logicalSize.height());
-    if (histogram.isSubsampled()) summary += QStringLiteral(" of %1").arg(QLocale().toString(histogram.availablePixelCount));
-    return {{QStringLiteral("valid"), true}, {QStringLiteral("summary"), summary}, {QStringLiteral("maximumValue"), 255}, {QStringLiteral("channels"), channels}};
-}
-
-QString rawColor(RawHistogramChannelId id) {
-    switch (id) {
-    case RawHistogramChannelId::Y: return QStringLiteral("#25303A");
-    case RawHistogramChannelId::U: return QStringLiteral("#45B7C4");
-    case RawHistogramChannelId::V: return QStringLiteral("#C65AAE");
-    case RawHistogramChannelId::Red: return QStringLiteral("#CE5B5B");
-    case RawHistogramChannelId::GreenRedRow: return QStringLiteral("#43A86A");
-    case RawHistogramChannelId::GreenBlueRow: return QStringLiteral("#2E8B57");
-    case RawHistogramChannelId::Blue: return QStringLiteral("#4776C9");
-    }
-    return QStringLiteral("#69747D");
-}
-
-QVariantMap rawHistogramMap(const RawPlaneHistogram& histogram) {
-    if (!histogram.isValid()) return {{QStringLiteral("valid"), false}, {QStringLiteral("summary"), QStringLiteral("Source-plane histogram unavailable")}};
-    QVariantList channels;
-    for (const RawHistogramChannel& channel : histogram.channels) {
-        channels << histogramChannel(rawHistogramChannelName(channel.id), rawColor(channel.id), channel.bins,
-                                     static_cast<quint64>(std::max<qint64>(0, channel.sampledSampleCount)), channel.mean, channel.standardDeviation,
-                                     channel.minimum, channel.maximum);
-    }
+    channels << histogramChannel(QStringLiteral("Luma"), QStringLiteral("#F4F5F2"),
+                                 histogram.luma.bins, samples, histogram.luma.mean,
+                                 histogram.luma.standardDeviation, histogram.luma.minimum,
+                                 histogram.luma.maximum);
     return {{QStringLiteral("valid"), true},
-            {QStringLiteral("summary"), QStringLiteral("Source %1 · %2-bit · %3 channels")
-                 .arg(histogram.domain == RawHistogramDomain::Yuv ? QStringLiteral("YUV") : QStringLiteral("Bayer"))
-                 .arg(histogram.validBits).arg(channels.size())},
-            {QStringLiteral("maximumValue"), histogram.maximumValue}, {QStringLiteral("channels"), channels}};
+            {QStringLiteral("maximumValue"), 255},
+            {QStringLiteral("channels"), channels}};
 }
 
 QSize logicalFrameSize(const ImageFramePtr& frame) {
@@ -106,7 +74,16 @@ QSize logicalFrameSize(const ImageFramePtr& frame) {
 } // namespace
 
 CompareController::CompareController(ImageLoader* loader, QObject* parent)
-    : QObject(parent), loader_(loader) {}
+    : QObject(parent), loader_(loader) {
+    const QSettings settings;
+    fileInformationVisible_ =
+        settings.value(QStringLiteral("compare/fileInformationVisible"), true).toBool();
+    exifVisible_ = settings.value(QStringLiteral("compare/exifVisible"), false).toBool();
+    histogramVisible_ =
+        settings.value(QStringLiteral("compare/histogramVisible"), false).toBool();
+    pixelValueVisible_ =
+        settings.value(QStringLiteral("compare/pixelValueVisible"), false).toBool();
+}
 
 ImageFramePtr CompareController::frame(int slot) const {
     return slot >= 0 && slot < frames_.size() ? frames_.at(slot) : ImageFramePtr{};
@@ -140,9 +117,8 @@ void CompareController::setPaths(const QStringList& requested) {
     frames_.fill({}, paths_.size());
     errors_.fill({}, paths_.size());
     generations_.fill(0, paths_.size());
-    histogramGenerations_.fill(0, paths_.size() * 2);
+    histogramGenerations_.fill(0, paths_.size());
     displayHistograms_.fill({}, paths_.size());
-    rawHistograms_.fill({}, paths_.size());
     holdCandidate_ = false;
     emit pathsChanged();
     emit holdCandidateChanged();
@@ -195,7 +171,7 @@ void CompareController::requestFrame(int slot, const QString& path) {
 }
 
 void CompareController::setPresentationMode(int mode) {
-    mode = std::clamp(mode, 0, 2); if (presentationMode_ == mode) return;
+    mode = std::clamp(mode, 0, 1); if (presentationMode_ == mode) return;
     setHoldCandidate(false);
     presentationMode_ = mode;
     if (canvas_) canvas_->setPresentationMode(mode);
@@ -220,6 +196,34 @@ void CompareController::setHoldCandidate(bool active) {
     holdCandidate_ = active;
     applyHoldFrame();
     emit holdCandidateChanged();
+}
+
+void CompareController::setFileInformationVisible(bool visible) {
+    if (fileInformationVisible_ == visible) return;
+    fileInformationVisible_ = visible;
+    QSettings().setValue(QStringLiteral("compare/fileInformationVisible"), visible);
+    emit fileInformationVisibleChanged();
+}
+
+void CompareController::setExifVisible(bool visible) {
+    if (exifVisible_ == visible) return;
+    exifVisible_ = visible;
+    QSettings().setValue(QStringLiteral("compare/exifVisible"), visible);
+    emit exifVisibleChanged();
+}
+
+void CompareController::setHistogramVisible(bool visible) {
+    if (histogramVisible_ == visible) return;
+    histogramVisible_ = visible;
+    QSettings().setValue(QStringLiteral("compare/histogramVisible"), visible);
+    emit histogramVisibleChanged();
+}
+
+void CompareController::setPixelValueVisible(bool visible) {
+    if (pixelValueVisible_ == visible) return;
+    pixelValueVisible_ = visible;
+    QSettings().setValue(QStringLiteral("compare/pixelValueVisible"), visible);
+    emit pixelValueVisibleChanged();
 }
 
 void CompareController::applyHoldFrame() {
@@ -265,7 +269,12 @@ QVariantList CompareController::pixelTexts(int sourceSlot, int x, int y) const {
             continue;
         }
         const auto sample = ComparisonPixelProbe::sample(*candidate, normalized);
-        values.append(sample.valid ? QStringLiteral("(%1, %2)  %3  •  %4").arg(sample.displayPixel.x()).arg(sample.displayPixel.y()).arg(sample.sourceValueText(), sample.displayValueText()) : QStringLiteral("Outside image"));
+        values.append(sample.valid
+                          ? QStringLiteral("(%1,%2) %3")
+                                .arg(sample.displayPixel.x())
+                                .arg(sample.displayPixel.y())
+                                .arg(sample.displayValueText())
+                          : QStringLiteral("Outside image"));
     }
     return values;
 }
@@ -283,45 +292,39 @@ QString CompareController::chooseScreenshotPath() {
     return dialog.exec() == QDialog::Accepted && !dialog.selectedFiles().isEmpty() ? dialog.selectedFiles().constFirst() : QString{};
 }
 
-void CompareController::requestHistogram(int slot, int source) {
-    if (slot < 0 || slot >= frames_.size() || source < 0 || source > 1 || !frames_.value(slot)) return;
-    const int generationIndex = slot * 2 + source;
-    const quint64 generation = ++histogramGenerations_[generationIndex];
+void CompareController::requestHistogram(int slot) {
+    if (slot < 0 || slot >= frames_.size() || !frames_.value(slot)) return;
+    const quint64 generation = ++histogramGenerations_[slot];
     const ImageFramePtr frame = frames_.at(slot);
     const QPointer<CompareController> self(this);
-    QThreadPool::globalInstance()->start([self, frame, slot, source, generation] {
-        const QVariantMap result = source == 0 ? displayHistogramMap(DisplayHistogramAnalyzer::analyze(*frame))
-                                               : rawHistogramMap(RawPlaneHistogramAnalyzer::analyze(*frame));
+    QThreadPool::globalInstance()->start([self, frame, slot, generation] {
+        const QVariantMap result = displayHistogramMap(DisplayHistogramAnalyzer::analyze(*frame));
         if (!self) return;
-        QMetaObject::invokeMethod(self.data(), [self, slot, source, generation, result] {
-            if (self) self->completeHistogram(slot, source, generation, result);
+        QMetaObject::invokeMethod(self.data(), [self, slot, generation, result] {
+            if (self) self->completeHistogram(slot, generation, result);
         }, Qt::QueuedConnection);
     });
 }
 
-QVariantMap CompareController::histogram(int slot, int source) const {
-    if (slot < 0 || slot >= frames_.size() || source < 0 || source > 1) return {};
-    return source == 0 ? displayHistograms_.value(slot) : rawHistograms_.value(slot);
+QVariantMap CompareController::histogram(int slot) const {
+    return slot >= 0 && slot < frames_.size() ? displayHistograms_.value(slot) : QVariantMap{};
 }
 
-void CompareController::completeHistogram(int slot, int source, quint64 generation, QVariantMap value) {
-    const int generationIndex = slot * 2 + source;
-    if (slot < 0 || generationIndex >= histogramGenerations_.size() || histogramGenerations_.at(generationIndex) != generation) return;
-    if (source == 0) displayHistograms_[slot] = std::move(value); else rawHistograms_[slot] = std::move(value);
+void CompareController::completeHistogram(int slot, quint64 generation, QVariantMap value) {
+    if (slot < 0 || slot >= histogramGenerations_.size()
+        || histogramGenerations_.at(slot) != generation) return;
+    displayHistograms_[slot] = std::move(value);
     ++histogramRevision_;
-    emit histogramChanged(slot, source);
+    emit histogramChanged(slot);
     emit histogramRevisionChanged();
 }
 
 void CompareController::clearHistograms(int slot) {
     if (slot < 0 || slot >= frames_.size()) return;
-    ++histogramGenerations_[slot * 2];
-    ++histogramGenerations_[slot * 2 + 1];
+    ++histogramGenerations_[slot];
     displayHistograms_[slot] = {};
-    rawHistograms_[slot] = {};
     ++histogramRevision_;
-    emit histogramChanged(slot, 0);
-    emit histogramChanged(slot, 1);
+    emit histogramChanged(slot);
     emit histogramRevisionChanged();
 }
 

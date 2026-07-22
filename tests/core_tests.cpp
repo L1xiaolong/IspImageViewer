@@ -140,6 +140,22 @@ void CoreTests::synchronizationCanBeConfigured() {
     target.normalizedRoi = QRectF(0.5, 0.5, 0.2, 0.2);
     QCOMPARE(group.synchronizedState(source, target), source);
 
+    ViewState previousSource;
+    previousSource.fitMode = FitMode::Manual;
+    previousSource.pixelsPerImagePixel = 1.0;
+    previousSource.normalizedCenter = {0.5, 0.5};
+    ViewState changedSource = previousSource;
+    changedSource.pixelsPerImagePixel = 1.2;
+    changedSource.normalizedCenter = {0.6, 0.45};
+    ViewState offsetTarget;
+    offsetTarget.fitMode = FitMode::Manual;
+    offsetTarget.pixelsPerImagePixel = 2.0;
+    offsetTarget.normalizedCenter = {0.25, 0.7};
+    const ViewState relative =
+        group.relativelySynchronizedState(previousSource, changedSource, offsetTarget);
+    QVERIFY(std::abs(relative.pixelsPerImagePixel - 2.4) < 0.000001);
+    QVERIFY(QLineF(relative.normalizedCenter, QPointF(0.35, 0.65)).length() < 0.000001);
+
     group.setPanSynchronized(false);
     const ViewState zoomOnly = group.synchronizedState(source, target);
     QCOMPARE(zoomOnly.pixelsPerImagePixel, 2.0);

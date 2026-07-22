@@ -91,7 +91,8 @@ class QmlImageCanvas : public QQuickRhiItem {
     QRectF cellRect(int slot) const;
     int slotAt(const QPointF& position) const;
     QPointF normalizedPoint(int slot, const QPointF& position) const;
-    void setViewState(int slot, const ViewState& state, bool notify = true);
+    void setViewState(int slot, const ViewState& state, bool notify = true,
+                      bool synchronizeViews = true);
     void notifyNavigationChanged();
     void emitPixelAt(const QPointF& position);
 };

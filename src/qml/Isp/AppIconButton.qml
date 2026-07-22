@@ -7,9 +7,11 @@ Button {
     property url iconSource
     property string toolTipText: text
     property bool compact: text.length === 0
+    property int controlSize: Theme.touchTarget
+    property int renderedIconSize: Theme.iconSize
 
-    implicitWidth: compact ? Theme.touchTarget : contentRow.implicitWidth + 20
-    implicitHeight: Theme.touchTarget
+    implicitWidth: compact ? controlSize : contentRow.implicitWidth + 20
+    implicitHeight: controlSize
     padding: 0
     opacity: enabled ? 1 : 0.38
 
@@ -26,10 +28,11 @@ Button {
             spacing: control.compact ? 0 : 6
             anchors.centerIn: parent
             Image {
-                width: Theme.iconSize
-                height: Theme.iconSize
+                width: control.renderedIconSize
+                height: control.renderedIconSize
                 source: control.iconSource
-                sourceSize: Qt.size(Theme.iconSize * 2, Theme.iconSize * 2)
+                sourceSize: Qt.size(control.renderedIconSize * 2,
+                                    control.renderedIconSize * 2)
                 fillMode: Image.PreserveAspectFit
             }
             Text {
