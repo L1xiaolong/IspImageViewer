@@ -35,9 +35,16 @@ jobs:
             exit 1
           fi
 
+  ci:
+    name: CI gate
+    needs: validate
+    uses: ./.github/workflows/build.yml
+
   package:
     name: Package (${{ matrix.name }})
-    needs: validate
+    needs:
+      - validate
+      - ci
     strategy:
       fail-fast: false
       matrix:
@@ -133,8 +140,33 @@ jobs:
           mkdir -p "$package_directory/qml"
           cp -a /ucrt64/share/qt6/qml/QtQml "$package_directory/qml/"
           cp -a /ucrt64/share/qt6/qml/QtQuick "$package_directory/qml/"
-          printf '[Paths]\nPrefix = .\nPlugins = plugins\nQmlImports = qml\n' \
+          # windeployqt places platforms/, imageformats/, etc. beside the EXE.
+          # Point Qt at that location instead of a non-existent plugins/ dir.
+          printf '[Paths]\nPrefix = .\nPlugins = .\nQmlImports = qml\n' \
             > "$package_directory/qt.conf"
+
+          # MSYS2 Qt links dynamically to GCC and distro libraries which
+          # windeployqt --compiler-runtime does not deploy. Resolve the import
+          # graph for the EXE, Qt plugins, and QML plugins recursively.
+          ./scripts/deploy_msys2_runtime.sh "$package_directory"
+
+          # A successful build is not enough: launch the exact packaged app and
+          # require it to load QML, render a frame, and save a screenshot.
+          smoke_screenshot="$package_directory/startup-smoke.png"
+          smoke_screenshot_windows="$(cygpath -w "$smoke_screenshot")"
+          isolated_path="$package_directory:/c/Windows/System32:/c/Windows"
+          PATH="$isolated_path" \
+            QT_PLUGIN_PATH= \
+            QT_QPA_PLATFORM_PLUGIN_PATH= \
+            QML_IMPORT_PATH= \
+            QML2_IMPORT_PATH= \
+            QT_LOGGING_TO_CONSOLE=1 \
+            /usr/bin/timeout 30s \
+            "$package_directory/ISPImageViewer.exe" \
+            --screenshot "$smoke_screenshot_windows" \
+            --screenshot-delay 1500
+          test -s "$smoke_screenshot"
+          rm -f "$smoke_screenshot"
           (
             cd dist
             zip -r "ISPImageViewer-${RELEASE_TAG}-${ASSET_SUFFIX}.zip" ISPImageViewer

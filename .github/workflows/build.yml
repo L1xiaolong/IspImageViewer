@@ -1,12 +1,9 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - '**'
-    tags-ignore:
-      - 'v*'
-  pull_request:
+  # CI is a reusable release gate. Ordinary pushes and pull requests do not
+  # run it; the Release workflow calls it immediately before packaging.
+  workflow_call:
 
 permissions:
   contents: read
