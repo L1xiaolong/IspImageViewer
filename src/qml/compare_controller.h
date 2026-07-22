@@ -103,6 +103,7 @@ class CompareController final : public QObject {
     int revision_ = 0;
     int histogramRevision_ = 0;
     QVector<quint64> histogramGenerations_;
+    QVector<bool> histogramRequested_;
     QVector<QVariantMap> displayHistograms_;
 };
 

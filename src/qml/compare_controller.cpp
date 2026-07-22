@@ -114,6 +114,7 @@ void CompareController::setPaths(const QStringList& requested) {
     errors_.fill({}, paths_.size());
     generations_.fill(0, paths_.size());
     histogramGenerations_.fill(0, paths_.size());
+    histogramRequested_.fill(false, paths_.size());
     displayHistograms_.fill({}, paths_.size());
     holdCandidate_ = false;
     emit pathsChanged();
@@ -150,6 +151,7 @@ void CompareController::requestFrame(int slot, const QString& path) {
             self->frames_[slot] = result.frame;
             self->refreshCanvas(slot, true);
             self->clearHistograms(slot);
+            if (self->histogramRequested_.value(slot)) self->requestHistogram(slot);
             emit self->frameChanged(slot, false);
             ++self->revision_;
             emit self->revisionChanged();
@@ -159,6 +161,7 @@ void CompareController::requestFrame(int slot, const QString& path) {
                     self->frames_[slot] = full.frame;
                     self->refreshCanvas(slot, false);
                     self->clearHistograms(slot);
+                    if (self->histogramRequested_.value(slot)) self->requestHistogram(slot);
                     emit self->frameChanged(slot, true);
                     ++self->revision_;
                     emit self->revisionChanged();
@@ -276,7 +279,9 @@ QVariantList CompareController::pixelTexts(int sourceSlot, int x, int y) const {
 }
 
 void CompareController::requestHistogram(int slot) {
-    if (slot < 0 || slot >= frames_.size() || !frames_.value(slot)) return;
+    if (slot < 0 || slot >= frames_.size()) return;
+    histogramRequested_[slot] = true;
+    if (!frames_.value(slot)) return;
     const quint64 generation = ++histogramGenerations_[slot];
     const ImageFramePtr frame = frames_.at(slot);
     const QPointer<CompareController> self(this);

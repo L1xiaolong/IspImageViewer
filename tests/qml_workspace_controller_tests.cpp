@@ -517,8 +517,9 @@ void QmlWorkspaceControllerTests::compareUsesCompactRgbaPixelTextAndLumaOnlyHist
     QSignalSpy histogramSpy(&compare, &CompareController::histogramChanged);
     compare.requestHistogram(0);
     QTRY_VERIFY_WITH_TIMEOUT(!histogramSpy.isEmpty(), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(
+        compare.histogram(0).value(QStringLiteral("valid")).toBool(), 5000);
     const QVariantMap histogram = compare.histogram(0);
-    QVERIFY(histogram.value(QStringLiteral("valid")).toBool());
     const QVariantList channels = histogram.value(QStringLiteral("channels")).toList();
     QCOMPARE(channels.size(), 1);
     QCOMPARE(channels.constFirst().toMap().value(QStringLiteral("name")).toString(),

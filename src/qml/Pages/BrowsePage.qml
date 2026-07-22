@@ -292,27 +292,39 @@ Rectangle {
                 for (let index = 0; index < paneRepeater.count; ++index) {
                     const pane = paneRepeater.itemAt(index)
                     if (pane)
-                        pane.SplitView.preferredWidth = 1
+                        pane.SplitView.preferredWidth = equalWidth
                 }
-                Qt.callLater(function() {
-                    for (let index = 0; index < paneRepeater.count; ++index) {
-                        const pane = paneRepeater.itemAt(index)
-                        if (pane)
-                            pane.SplitView.preferredWidth = equalWidth
-                    }
-                })
             }
             handle: Rectangle {
                 objectName: "horizontalPaneHandle"
                 implicitWidth: 7
                 color: SplitHandle.pressed || SplitHandle.hovered ? "#C8D4DC" : "transparent"
+                property bool handlePressed: SplitHandle.pressed
+                property real pressCoordinate: 0
+                property double lastClickAt: 0
+                onHandlePressedChanged: {
+                    if (handlePressed) {
+                        pressCoordinate = x
+                        return
+                    }
+                    if (Math.abs(x - pressCoordinate) > 1) {
+                        lastClickAt = 0
+                        return
+                    }
+                    const now = Date.now()
+                    if (now - lastClickAt <= 500) {
+                        horizontalSplit.resetEqual()
+                        lastClickAt = 0
+                    } else {
+                        lastClickAt = now
+                    }
+                }
                 Rectangle {
                     anchors.centerIn: parent
                     width: 1
                     height: parent.height
                     color: SplitHandle.pressed || SplitHandle.hovered ? "#7893A6" : Theme.opticalGray
                 }
-                TapHandler { onDoubleTapped: horizontalSplit.resetEqual() }
             }
             Repeater {
                 id: paneRepeater
@@ -324,7 +336,7 @@ Rectangle {
                     workspaceController: root.workspaceController
                     paneIndex: index
                     iconPrefix: root.iconPrefix
-                    SplitView.fillWidth: true
+                    SplitView.fillWidth: index === paneRepeater.count - 1
                     SplitView.minimumWidth: 190
                     SplitView.preferredWidth: (horizontalSplit.width -
                                                Math.max(0, paneRepeater.count - 1) * 7) /
@@ -342,46 +354,76 @@ Rectangle {
             orientation: Qt.Vertical
             function resetEqual() {
                 const equalHeight = (verticalSplit.height - 7) / 2
-                topRow.SplitView.preferredHeight = 1
-                bottomRow.SplitView.preferredHeight = 1
-                Qt.callLater(function() {
-                    topRow.SplitView.preferredHeight = equalHeight
-                    bottomRow.SplitView.preferredHeight = equalHeight
-                })
+                topRow.SplitView.preferredHeight = equalHeight
+                bottomRow.SplitView.preferredHeight = equalHeight
             }
             handle: Rectangle {
                 objectName: "verticalPaneHandle"
                 implicitHeight: 7
                 color: SplitHandle.pressed || SplitHandle.hovered ? "#C8D4DC" : "transparent"
+                property bool handlePressed: SplitHandle.pressed
+                property real pressCoordinate: 0
+                property double lastClickAt: 0
+                onHandlePressedChanged: {
+                    if (handlePressed) {
+                        pressCoordinate = y
+                        return
+                    }
+                    if (Math.abs(y - pressCoordinate) > 1) {
+                        lastClickAt = 0
+                        return
+                    }
+                    const now = Date.now()
+                    if (now - lastClickAt <= 500) {
+                        verticalSplit.resetEqual()
+                        lastClickAt = 0
+                    } else {
+                        lastClickAt = now
+                    }
+                }
                 Rectangle {
                     anchors.centerIn: parent
                     width: parent.width
                     height: 1
                     color: SplitHandle.pressed || SplitHandle.hovered ? "#7893A6" : Theme.opticalGray
                 }
-                TapHandler { onDoubleTapped: verticalSplit.resetEqual() }
             }
             SplitView {
                 id: topRow
                 orientation: Qt.Horizontal
-                SplitView.fillHeight: true
+                SplitView.fillHeight: false
                 SplitView.minimumHeight: 190
                 SplitView.preferredHeight: (verticalSplit.height - 7) / 2
                 function resetEqual() {
                     const equalWidth = (topRow.width - 7) / 2
-                    topLeft.SplitView.preferredWidth = 1
-                    topRight.SplitView.preferredWidth = 1
-                    Qt.callLater(function() {
-                        topLeft.SplitView.preferredWidth = equalWidth
-                        topRight.SplitView.preferredWidth = equalWidth
-                    })
+                    topLeft.SplitView.preferredWidth = equalWidth
+                    topRight.SplitView.preferredWidth = equalWidth
                 }
                 handle: Rectangle {
                     objectName: "topRowPaneHandle"
                     implicitWidth: 7
                     color: SplitHandle.pressed || SplitHandle.hovered ? "#C8D4DC" : "transparent"
+                    property bool handlePressed: SplitHandle.pressed
+                    property real pressCoordinate: 0
+                    property double lastClickAt: 0
+                    onHandlePressedChanged: {
+                        if (handlePressed) {
+                            pressCoordinate = x
+                            return
+                        }
+                        if (Math.abs(x - pressCoordinate) > 1) {
+                            lastClickAt = 0
+                            return
+                        }
+                        const now = Date.now()
+                        if (now - lastClickAt <= 500) {
+                            topRow.resetEqual()
+                            lastClickAt = 0
+                        } else {
+                            lastClickAt = now
+                        }
+                    }
                     Rectangle { anchors.centerIn: parent; width: 1; height: parent.height; color: SplitHandle.pressed || SplitHandle.hovered ? "#7893A6" : Theme.opticalGray }
-                    TapHandler { onDoubleTapped: topRow.resetEqual() }
                 }
                 BrowserPane {
                     id: topLeft
@@ -389,7 +431,7 @@ Rectangle {
                     workspaceController: root.workspaceController
                     paneIndex: 0
                     iconPrefix: root.iconPrefix
-                    SplitView.fillWidth: true
+                    SplitView.fillWidth: false
                     SplitView.minimumWidth: 190
                     SplitView.preferredWidth: (topRow.width - 7) / 2
                     onNewFolderRequested: newFolderDialog.open()
@@ -414,19 +456,34 @@ Rectangle {
                 SplitView.preferredHeight: (verticalSplit.height - 7) / 2
                 function resetEqual() {
                     const equalWidth = (bottomRow.width - 7) / 2
-                    bottomLeft.SplitView.preferredWidth = 1
-                    bottomRight.SplitView.preferredWidth = 1
-                    Qt.callLater(function() {
-                        bottomLeft.SplitView.preferredWidth = equalWidth
-                        bottomRight.SplitView.preferredWidth = equalWidth
-                    })
+                    bottomLeft.SplitView.preferredWidth = equalWidth
+                    bottomRight.SplitView.preferredWidth = equalWidth
                 }
                 handle: Rectangle {
                     objectName: "bottomRowPaneHandle"
                     implicitWidth: 7
                     color: SplitHandle.pressed || SplitHandle.hovered ? "#C8D4DC" : "transparent"
+                    property bool handlePressed: SplitHandle.pressed
+                    property real pressCoordinate: 0
+                    property double lastClickAt: 0
+                    onHandlePressedChanged: {
+                        if (handlePressed) {
+                            pressCoordinate = x
+                            return
+                        }
+                        if (Math.abs(x - pressCoordinate) > 1) {
+                            lastClickAt = 0
+                            return
+                        }
+                        const now = Date.now()
+                        if (now - lastClickAt <= 500) {
+                            bottomRow.resetEqual()
+                            lastClickAt = 0
+                        } else {
+                            lastClickAt = now
+                        }
+                    }
                     Rectangle { anchors.centerIn: parent; width: 1; height: parent.height; color: SplitHandle.pressed || SplitHandle.hovered ? "#7893A6" : Theme.opticalGray }
-                    TapHandler { onDoubleTapped: bottomRow.resetEqual() }
                 }
                 BrowserPane {
                     id: bottomLeft
@@ -434,7 +491,7 @@ Rectangle {
                     workspaceController: root.workspaceController
                     paneIndex: 2
                     iconPrefix: root.iconPrefix
-                    SplitView.fillWidth: true
+                    SplitView.fillWidth: false
                     SplitView.minimumWidth: 190
                     SplitView.preferredWidth: (bottomRow.width - 7) / 2
                     onNewFolderRequested: newFolderDialog.open()

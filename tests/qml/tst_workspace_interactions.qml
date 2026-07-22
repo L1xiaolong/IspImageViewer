@@ -69,9 +69,10 @@ TestCase {
         verify(first && second && handle);
         mouseDrag(handle, handle.width / 2, handle.height / 2, 100, 0, Qt.LeftButton);
         verify(Math.abs(first.width - second.width) > 100);
-        handle.parent.resetEqual();
-        wait(40);
-        compare(Math.round(first.width), Math.round(second.width));
+        mouseClick(handle, 1, handle.height / 2, Qt.LeftButton);
+        mouseClick(handle, 1, handle.height / 2, Qt.LeftButton);
+        tryVerify(function() { return Math.abs(first.width - second.width) < 2 }, 1000,
+                  "Double-clicking the splitter should restore equal pane widths");
     }
 
     function test_closeAllPanesLeavesOneTreeControlledManager() {
