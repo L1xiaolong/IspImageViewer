@@ -134,12 +134,17 @@ jobs:
           cp "$executable" "$package_directory/ISPImageViewer.exe"
           # MSYS2's windeployqt cannot launch its QML import scanner reliably.
           # Our QML module is compiled into the executable; deploy the required
-          # Qt runtime and the two Qt-provided QML import trees explicitly.
+          # Qt runtime and Qt-provided QML import trees explicitly.
           windeployqt6 --release --compiler-runtime --no-translations \
             --no-quick-import "$package_directory/ISPImageViewer.exe"
           mkdir -p "$package_directory/qml"
-          cp -a /ucrt64/share/qt6/qml/QtQml "$package_directory/qml/"
-          cp -a /ucrt64/share/qt6/qml/QtQuick "$package_directory/qml/"
+          qt_qml_directory='/ucrt64/share/qt6/qml'
+          for qml_module in QtCore QtQml QtQuick; do
+            source_module="$qt_qml_directory/$qml_module"
+            test -f "$source_module/qmldir"
+            cp -a "$source_module" "$package_directory/qml/"
+            test -f "$package_directory/qml/$qml_module/qmldir"
+          done
           # windeployqt places platforms/, imageformats/, etc. beside the EXE.
           # Point Qt at that location instead of a non-existent plugins/ dir.
           printf '[Paths]\nPrefix = .\nPlugins = .\nQmlImports = qml\n' \
@@ -160,7 +165,7 @@ jobs:
             QT_QPA_PLATFORM_PLUGIN_PATH= \
             QML_IMPORT_PATH= \
             QML2_IMPORT_PATH= \
-            QT_LOGGING_TO_CONSOLE=1 \
+            QT_FORCE_STDERR_LOGGING=1 \
             /usr/bin/timeout 30s \
             "$package_directory/ISPImageViewer.exe" \
             --screenshot "$smoke_screenshot_windows" \
