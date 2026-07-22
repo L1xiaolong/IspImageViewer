@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/image_types.h"
+#include "io/image_loader.h"
 
 #include <QObject>
 #include <QSet>
@@ -9,7 +10,6 @@
 
 namespace ispview {
 
-class ImageLoader;
 
 // Presentation data for the QML properties inspector. Decoding and histogram analysis stay in
 // C++; QML receives only immutable field rows and plot-ready channel data.
@@ -72,6 +72,7 @@ class ImagePropertiesController final : public QObject {
     QVariantMap displayHistogram_;
     QVariantMap sourceHistogram_;
     QSet<int> pendingHistogramSources_;
+    LoadHandle loadHandle_;
 };
 
 } // namespace ispview

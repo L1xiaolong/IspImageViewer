@@ -104,9 +104,13 @@ Rectangle {
     }
     Connections {
         target: toolbar.searchControl
-        function onTextChanged() {
-            root.controller.setFilterText(toolbar.searchControl.text);
-        }
+        function onTextChanged() { searchDebounce.restart(); }
+    }
+    Timer {
+        id: searchDebounce
+        interval: 120
+        repeat: false
+        onTriggered: root.controller.setFilterText(toolbar.searchControl.text)
     }
     Connections {
         target: toolbar.clearSearchControl
@@ -834,7 +838,9 @@ Rectangle {
                         height: galleryWorkspace.actualPixels && root.controller.galleryImageSize.height > 0
                                 ? root.controller.galleryImageSize.height * galleryWorkspace.manualZoom
                                 : Math.max(1, galleryFlick.height - 36)
-                        source: galleryWorkspace.currentPreviewUrl
+                        source: galleryWorkspace.currentPreviewUrl.toString().length > 0
+                                ? galleryWorkspace.currentPreviewUrl.toString() + "&purpose=gallery"
+                                : ""
                         // Do not change the requested source size for each wheel step.
                         // A source reload was the brief white flash seen during zooming.
                         // Keep a stable, high-quality preview texture through the zoom gesture.

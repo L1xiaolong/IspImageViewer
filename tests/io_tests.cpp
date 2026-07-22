@@ -142,6 +142,8 @@ class IoTests final : public QObject {
     void singleFileRenameMovesSidecarAndRejectsConflicts();
     void dropCopyCopiesFilesAndFoldersWithoutOverwriting();
     void scannerFiltersAndNaturallySortsFiles();
+    void scannerExcludesHiddenFilesAndDirectoryTrees();
+    void directoryScannerPublishesIncrementalBatches();
     void recursiveImageFolderScanFindsOnlyBranchesContainingImages();
     void decoderRejectsCorruptInput();
     void metadataCapabilityMatchesBuildFeature();
@@ -176,6 +178,7 @@ class IoTests final : public QObject {
     void namedRawPresetsRoundTripOverwriteAndDelete();
     void filenameRulesApplyOrderedPresetAndCapturedOverrides();
     void imageLoaderCoalescesIdenticalInFlightRequests();
+    void imageLoaderCancellationSuppressesStaleCallbacks();
 };
 
 void IoTests::decoderScalesPreviewAndKeepsMetadata() {
@@ -585,6 +588,59 @@ void IoTests::scannerFiltersAndNaturallySortsFiles() {
         QDir(unsupportedChild).filePath(QStringLiteral("notes.txt"))));
 }
 
+void IoTests::scannerExcludesHiddenFilesAndDirectoryTrees() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QImage image(4, 3, QImage::Format_RGBA8888);
+    image.fill(Qt::blue);
+    const QString visiblePath = directory.filePath(QStringLiteral("visible.png"));
+    const QString hiddenPath = directory.filePath(QStringLiteral(".hidden.png"));
+    const QString hiddenDirectory = directory.filePath(QStringLiteral(".hidden-album"));
+    QVERIFY(image.save(visiblePath));
+    QVERIFY(image.save(hiddenPath));
+    QVERIFY(QDir().mkpath(hiddenDirectory));
+    QVERIFY(image.save(QDir(hiddenDirectory).filePath(QStringLiteral("inside.jpg"))));
+
+    const QVector<ImageFileRecord> files = DirectoryScanner::scan(directory.path());
+    QCOMPARE(files.size(), 1);
+    QCOMPARE(files.constFirst().path, visiblePath);
+    QVERIFY(!DirectoryScanner::isSupportedImageFile(hiddenPath));
+
+    const QVector<ImageFileRecord> recursive =
+        DirectoryScanner::scanImageFoldersRecursively(directory.path());
+    QCOMPARE(recursive.size(), 1);
+    QCOMPARE(recursive.constFirst().path, visiblePath);
+}
+
+void IoTests::directoryScannerPublishesIncrementalBatches() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    for (int index = 0; index < 450; ++index) {
+        QVERIFY(QDir().mkpath(directory.filePath(QStringLiteral("folder-%1").arg(index))));
+    }
+    DirectoryScanner scanner;
+    int batchCount = 0;
+    int publishedItems = 0;
+    bool finished = false;
+    quint64 expectedGeneration = 0;
+    connect(&scanner, &DirectoryScanner::scanBatchReady, this,
+            [&](const QString&, const QVector<ImageFileRecord>& files, quint64 generation) {
+                if (generation != expectedGeneration) return;
+                ++batchCount;
+                publishedItems += static_cast<int>(files.size());
+            });
+    connect(&scanner, &DirectoryScanner::scanFinished, this,
+            [&](const QString&, const QVector<ImageFileRecord>& files, quint64 generation) {
+                if (generation != expectedGeneration) return;
+                QCOMPARE(files.size(), 450);
+                finished = true;
+            });
+    expectedGeneration = scanner.scanAsync(directory.path());
+    QTRY_VERIFY_WITH_TIMEOUT(finished, 5000);
+    QVERIFY(batchCount >= 3);
+    QCOMPARE(publishedItems, 450);
+}
+
 void IoTests::recursiveImageFolderScanFindsOnlyBranchesContainingImages() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
@@ -643,10 +699,12 @@ void IoTests::thumbnailDiskCacheRoundTripsImage() {
     QImage source(32, 24, QImage::Format_RGBA8888);
     source.fill(QColor(90, 80, 70, 123));
 
-    QVERIFY(cache.store(QStringLiteral("stable-key"), source));
+    QVERIFY(cache.store(QStringLiteral("stable-key"), source, QSize(640, 480)));
     const QImage restored = cache.load(QStringLiteral("stable-key"));
     QCOMPARE(restored.size(), source.size());
     QCOMPARE(restored.pixelColor(4, 5), source.pixelColor(4, 5));
+    QCOMPARE(restored.text(QStringLiteral("ispview.sourceWidth")), QStringLiteral("640"));
+    QCOMPARE(restored.text(QStringLiteral("ispview.sourceHeight")), QStringLiteral("480"));
     QVERIFY(cache.load(QStringLiteral("missing-key")).isNull());
 }
 
@@ -1536,6 +1594,33 @@ void IoTests::imageLoaderCoalescesIdenticalInFlightRequests() {
         cacheHitCalledSynchronously = true;
     });
     QVERIFY(cacheHitCalledSynchronously);
+    QCOMPARE(decoder->calls.load(std::memory_order_relaxed), 1);
+}
+
+void IoTests::imageLoaderCancellationSuppressesStaleCallbacks() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("cancel.png"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    QCOMPARE(file.write("fixture"), 7);
+    file.close();
+
+    auto decoder = std::make_shared<DelayedCountingDecoder>();
+    ImageLoader loader(decoder);
+    int cancelledCallbacks = 0;
+    int liveCallbacks = 0;
+    LoadHandle cancelled = loader.request(
+        1, {path, DecodePurpose::Full, {}},
+        [&cancelledCallbacks](quint64, const DecodeResult&) { ++cancelledCallbacks; });
+    loader.request(2, {path, DecodePurpose::Full, {}},
+                   [&liveCallbacks](quint64, const DecodeResult& result) {
+                       QVERIFY(result.succeeded());
+                       ++liveCallbacks;
+                   });
+    cancelled.cancel();
+    QTRY_COMPARE_WITH_TIMEOUT(liveCallbacks, 1, 2000);
+    QCOMPARE(cancelledCallbacks, 0);
     QCOMPARE(decoder->calls.load(std::memory_order_relaxed), 1);
 }
 

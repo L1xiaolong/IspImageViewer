@@ -10,6 +10,7 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QPointer>
+#include <QQuickWindow>
 
 #include <algorithm>
 
@@ -118,6 +119,8 @@ QString FullScreenController::revealCurrent() {
 
 void FullScreenController::showIndex(int index) {
     if (index < 0 || index >= paths_.size()) return;
+    previewHandle_.cancel();
+    fullHandle_.cancel();
     currentIndex_ = index;
     frame_.reset();
     loading_ = true;
@@ -128,10 +131,16 @@ void FullScreenController::showIndex(int index) {
     emit stateChanged();
 
     const auto rawParameters = loader_->rawParameters(path);
-    const QSize previewSize = rawParameters && !rawParameters->isYuv() ? QSize(1280, 800)
-                                                                       : QSize(2560, 1600);
+    const qreal dpr = canvas_ && canvas_->window() ? canvas_->window()->devicePixelRatio() : 1.0;
+    QSize previewSize = canvas_ ? QSize(qRound(canvas_->width() * dpr),
+                                       qRound(canvas_->height() * dpr))
+                                : QSize(1920, 1200);
+    previewSize = previewSize.expandedTo(QSize(960, 720)).boundedTo(QSize(2560, 1600));
+    if (rawParameters && !rawParameters->isYuv()) {
+        previewSize = previewSize.boundedTo(QSize(1280, 800));
+    }
     const QPointer<FullScreenController> self(this);
-    loader_->request(generation, {path, DecodePurpose::Preview, previewSize},
+    previewHandle_ = loader_->request(generation, {path, DecodePurpose::Preview, previewSize},
                      [self, generation, path](quint64 id, const DecodeResult& result) {
         if (!self || id != generation || self->generation_ != generation ||
             self->currentPath() != path) return;
@@ -146,12 +155,12 @@ void FullScreenController::showIndex(int index) {
         self->refreshCanvas(true);
         emit self->stateChanged();
         self->requestFullFrame(path, generation);
-    }, 3);
+    }, RequestOptions{LoadCategory::Interactive, 20, QStringLiteral("fullscreen-preview")});
 }
 
 void FullScreenController::requestFullFrame(const QString& path, quint64 generation) {
     const QPointer<FullScreenController> self(this);
-    loader_->request(generation, {path, DecodePurpose::Full, {}},
+    fullHandle_ = loader_->request(generation, {path, DecodePurpose::Full, {}},
                      [self, generation, path](quint64 id, const DecodeResult& result) {
         if (!self || id != generation || self->generation_ != generation ||
             self->currentPath() != path) return;
@@ -163,7 +172,7 @@ void FullScreenController::requestFullFrame(const QString& path, quint64 generat
         self->frame_ = result.frame;
         self->refreshCanvas(false);
         emit self->stateChanged();
-    }, 1);
+    }, RequestOptions{LoadCategory::Interactive, 0, QStringLiteral("fullscreen-full")});
 }
 
 void FullScreenController::refreshCanvas(bool resetView) {

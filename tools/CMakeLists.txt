@@ -29,3 +29,17 @@ target_link_libraries(ispview_sample_check PRIVATE
     Qt6::Gui
 )
 ispview_enable_warnings(ispview_sample_check)
+
+qt_add_executable(ispview_browser_benchmark
+    browser_benchmark.cpp
+)
+
+target_link_libraries(ispview_browser_benchmark PRIVATE
+    ispview_io
+    Qt6::Core
+    Qt6::Gui
+)
+if(WIN32)
+    target_link_libraries(ispview_browser_benchmark PRIVATE psapi)
+endif()
+ispview_enable_warnings(ispview_browser_benchmark)

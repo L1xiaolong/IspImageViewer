@@ -19,6 +19,7 @@
 #include <QLocale>
 #include <QPointer>
 #include <QSettings>
+#include <QSet>
 #include <QThreadPool>
 #include <QTimer>
 
@@ -49,9 +50,11 @@ void BrowseController::initialize(const QString& initialDirectory, bool startEmp
     filterModel_ = new ThumbnailFilterProxyModel(this);
     directoryWatcher_ = new QFileSystemWatcher(this);
     refreshTimer_ = new QTimer(this);
+    refreshDeadlineTimer_ = new QTimer(this);
     recentCandidateTimer_ = new QTimer(this);
     filterModel_->setSourceModel(thumbnailModel_);
-    fileSystemModel_->setFilter(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Drives);
+    fileSystemModel_->setFilter(QDir::Dirs | QDir::Readable | QDir::NoDotAndDotDot |
+                                QDir::NoSymLinks | QDir::Drives);
 #ifdef Q_OS_WIN
     // Invalid root index exposes all native drive roots on Windows.
     fileSystemModel_->setRootPath(QString{});
@@ -79,13 +82,27 @@ void BrowseController::initialize(const QString& initialDirectory, bool startEmp
         filterModel_->setSortMode(static_cast<BrowserSortMode>(savedSortMode));
     }
 
+    connect(scanner_, &DirectoryScanner::scanBatchReady, this,
+            [this](const QString& directory, const QVector<ImageFileRecord>& files,
+                   quint64 generation) {
+                if (generation != scanGeneration_ || directory != currentDirectory_ ||
+                    !incrementalScan_) {
+                    return;
+                }
+                thumbnailModel_->appendFiles(files);
+                setStatusText(QStringLiteral("Scanning %1… %2 items")
+                                  .arg(QDir::toNativeSeparators(currentDirectory_))
+                                  .arg(thumbnailModel_->rowCount()));
+            });
     connect(scanner_, &DirectoryScanner::scanFinished, this,
             [this](const QString& directory, const QVector<ImageFileRecord>& files,
                    quint64 generation) {
                 if (generation != scanGeneration_ || directory != currentDirectory_) {
                     return;
                 }
-                thumbnailModel_->setFiles(files);
+                if (!incrementalScan_) {
+                    thumbnailModel_->updateFiles(files);
+                }
                 QStringList existing;
                 for (const QString& path : std::as_const(selectedPaths_)) {
                     if (QFileInfo::exists(path)) {
@@ -111,9 +128,20 @@ void BrowseController::initialize(const QString& initialDirectory, bool startEmp
             });
     refreshTimer_->setSingleShot(true);
     refreshTimer_->setInterval(250);
-    connect(directoryWatcher_, &QFileSystemWatcher::directoryChanged, refreshTimer_,
-            qOverload<>(&QTimer::start));
-    connect(refreshTimer_, &QTimer::timeout, this, &BrowseController::rescanCurrentDirectory);
+    refreshDeadlineTimer_->setSingleShot(true);
+    refreshDeadlineTimer_->setInterval(1'000);
+    connect(directoryWatcher_, &QFileSystemWatcher::directoryChanged, this, [this] {
+        refreshTimer_->start();
+        if (!refreshDeadlineTimer_->isActive()) refreshDeadlineTimer_->start();
+    });
+    connect(refreshTimer_, &QTimer::timeout, this, [this] {
+        refreshDeadlineTimer_->stop();
+        rescanCurrentDirectory();
+    });
+    connect(refreshDeadlineTimer_, &QTimer::timeout, this, [this] {
+        refreshTimer_->stop();
+        rescanCurrentDirectory();
+    });
     recentCandidateTimer_->setSingleShot(true);
     recentCandidateTimer_->setInterval(10'000);
     connect(recentCandidateTimer_, &QTimer::timeout, this, [this] {
@@ -570,6 +598,7 @@ void BrowseController::setGalleryPath(const QString& path) {
         return;
     }
     galleryPath_ = normalized;
+    galleryLoadHandle_.cancel();
     galleryFrame_.reset();
     galleryImageSize_ = {};
     galleryInfoText_.clear();
@@ -580,7 +609,7 @@ void BrowseController::setGalleryPath(const QString& path) {
     }
     const quint64 requestId = ++galleryRequestId_;
     const QPointer<BrowseController> self(this);
-    loader_->request(
+    galleryLoadHandle_ = loader_->request(
         requestId, {normalized, DecodePurpose::Full, {}},
         [self, normalized](quint64 completedId, const DecodeResult& result) {
             if (!self || completedId != self->galleryRequestId_ ||
@@ -612,8 +641,7 @@ void BrowseController::setGalleryPath(const QString& path) {
                         .arg(QLocale().formattedDataSize(result.frame->metadata.fileSize));
             }
             emit self->galleryImageChanged();
-        },
-        1);
+        }, RequestOptions{LoadCategory::Interactive, 0, QStringLiteral("gallery")});
 }
 
 QString BrowseController::probeGalleryPixel(int x, int y) const {
@@ -661,8 +689,8 @@ void BrowseController::setGridCellWidth(int width) {
 
 void BrowseController::openDirectoryInternal(const QString& path, bool addToHistory) {
     const QFileInfo info(path);
-    if (!info.exists() || !info.isDir()) {
-        setStatusText(QStringLiteral("Folder does not exist: %1").arg(path));
+    if (!info.exists() || !info.isDir() || !DirectoryScanner::isBrowsableEntry(info)) {
+        setStatusText(QStringLiteral("Folder is hidden, unreadable, or unavailable: %1").arg(path));
         return;
     }
     currentDirectory_ = info.absoluteFilePath();
@@ -688,12 +716,14 @@ void BrowseController::openDirectoryInternal(const QString& path, bool addToHist
     }
     directoryWatcher_->addPath(currentDirectory_);
     thumbnailModel_->setFiles({});
+    incrementalScan_ = true;
     setStatusText(QStringLiteral("Scanning %1…").arg(QDir::toNativeSeparators(currentDirectory_)));
     scanGeneration_ = scanner_->scanAsync(currentDirectory_);
 }
 
 void BrowseController::rescanCurrentDirectory() {
     if (!currentDirectory_.isEmpty()) {
+        incrementalScan_ = false;
         scanGeneration_ = scanner_->scanAsync(currentDirectory_);
     }
 }
@@ -708,8 +738,12 @@ void BrowseController::setStatusText(const QString& text) {
 
 void BrowseController::updateSelection(const QStringList& paths) {
     QStringList normalized;
+    normalized.reserve(paths.size());
+    QSet<QString> seen;
+    seen.reserve(paths.size());
     for (const QString& path : paths) {
-        if (!path.isEmpty() && !normalized.contains(path)) {
+        if (!path.isEmpty() && !seen.contains(path)) {
+            seen.insert(path);
             normalized.append(path);
         }
     }

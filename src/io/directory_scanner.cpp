@@ -5,10 +5,10 @@
 #include <QCollator>
 #include <QDir>
 #include <QDirIterator>
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QPointer>
 #include <QSet>
-#include <QThreadPool>
 
 #include <algorithm>
 #include <utility>
@@ -27,16 +27,52 @@ bool isDescendantPath(const QDir& root, const QString& candidate) {
            !relative.startsWith(QStringLiteral("../")) && !QDir::isAbsolutePath(relative);
 }
 
+constexpr int kScanBatchSize = 192;
+constexpr qint64 kScanBatchMilliseconds = 8;
+
 } // namespace
 
-DirectoryScanner::DirectoryScanner(QObject* parent) : QObject(parent) {}
+DirectoryScanner::DirectoryScanner(QObject* parent) : QObject(parent) {
+    pool_.setMaxThreadCount(1);
+    pool_.setExpiryTimeout(10'000);
+}
+
+DirectoryScanner::~DirectoryScanner() { cancel(); }
+
+void DirectoryScanner::cancel() {
+    if (currentCancel_) currentCancel_->store(true, std::memory_order_relaxed);
+}
 
 quint64 DirectoryScanner::scanAsync(const QString& directory) {
+    cancel();
     const quint64 generation = ++generation_;
+    const CancelFlag cancelled = std::make_shared<std::atomic_bool>(false);
+    currentCancel_ = cancelled;
     const QPointer<DirectoryScanner> self(this);
-    QThreadPool::globalInstance()->start(
-        [self, directory, generation] {
-            auto files = scan(directory);
+    pool_.start(
+        [self, directory, generation, cancelled] {
+            if (self) {
+                QMetaObject::invokeMethod(
+                    self,
+                    [self, directory, generation] {
+                        if (self) emit self->scanStarted(directory, generation);
+                    },
+                    Qt::QueuedConnection);
+            }
+            auto files = scanBatched(
+                directory, cancelled,
+                [self, directory, generation, cancelled](QVector<ImageFileRecord> batch) {
+                    if (!self || cancelled->load(std::memory_order_relaxed)) return;
+                    QMetaObject::invokeMethod(
+                        self,
+                        [self, directory, generation, batch = std::move(batch), cancelled] {
+                            if (self && !cancelled->load(std::memory_order_relaxed)) {
+                                emit self->scanBatchReady(directory, batch, generation);
+                            }
+                        },
+                        Qt::QueuedConnection);
+                });
+            if (cancelled->load(std::memory_order_relaxed)) return;
             if (!self) {
                 return;
             }
@@ -54,11 +90,15 @@ quint64 DirectoryScanner::scanAsync(const QString& directory) {
 }
 
 quint64 DirectoryScanner::scanImageFoldersAsync(const QString& directory) {
+    cancel();
     const quint64 generation = ++generation_;
+    const CancelFlag cancelled = std::make_shared<std::atomic_bool>(false);
+    currentCancel_ = cancelled;
     const QPointer<DirectoryScanner> self(this);
-    QThreadPool::globalInstance()->start(
-        [self, directory, generation] {
+    pool_.start(
+        [self, directory, generation, cancelled] {
             auto files = scanImageFoldersRecursively(directory);
+            if (cancelled->load(std::memory_order_relaxed)) return;
             if (!self) {
                 return;
             }
@@ -76,23 +116,44 @@ quint64 DirectoryScanner::scanImageFoldersAsync(const QString& directory) {
 }
 
 QVector<ImageFileRecord> DirectoryScanner::scan(const QString& directory) {
-    QDir dir(directory);
-    const QStringList filters = supportedImageNameFilters();
-    const QFileInfoList entries =
-        dir.entryInfoList(filters, QDir::Files | QDir::Readable | QDir::NoSymLinks, QDir::NoSort);
+    return scanBatched(directory, {}, {});
+}
 
-    const QFileInfoList directories = dir.entryInfoList(
-        QDir::Dirs | QDir::Readable | QDir::NoDotAndDotDot | QDir::NoSymLinks, QDir::NoSort);
-
+QVector<ImageFileRecord> DirectoryScanner::scanBatched(
+    const QString& directory, const CancelFlag& cancelled,
+    const std::function<void(QVector<ImageFileRecord>)>& publishBatch) {
     QVector<ImageFileRecord> result;
-    result.reserve(entries.size() + directories.size());
-    for (const QFileInfo& info : directories) {
-        result.push_back({info.absoluteFilePath(), info.fileName(), 0, info.lastModified(), true});
+    QVector<ImageFileRecord> batch;
+    batch.reserve(kScanBatchSize);
+    QElapsedTimer timer;
+    timer.start();
+    QDirIterator iterator(directory,
+                          QDir::AllEntries | QDir::Readable | QDir::NoDotAndDotDot |
+                              QDir::NoSymLinks,
+                          QDirIterator::NoIteratorFlags);
+    while (iterator.hasNext()) {
+        if (cancelled && cancelled->load(std::memory_order_relaxed)) return {};
+        const QFileInfo info = iterator.nextFileInfo();
+        if (!isBrowsableEntry(info)) continue;
+        if (!info.isDir() && (!info.isFile() || !hasSupportedImageSuffix(info.fileName()))) {
+            continue;
+        }
+        ImageFileRecord record{info.absoluteFilePath(), info.fileName(),
+                               info.isDir() ? 0 : info.size(), info.lastModified(), info.isDir(),
+                               {}};
+        record.fileType = info.isDir() ? QStringLiteral("folder")
+                                       : info.suffix().toCaseFolded();
+        result.push_back(record);
+        if (publishBatch) {
+            batch.push_back(std::move(record));
+            if (batch.size() >= kScanBatchSize || timer.elapsed() >= kScanBatchMilliseconds) {
+                publishBatch(std::exchange(batch, {}));
+                batch.reserve(kScanBatchSize);
+                timer.restart();
+            }
+        }
     }
-    for (const auto& info : entries) {
-        result.push_back(
-            {info.absoluteFilePath(), info.fileName(), info.size(), info.lastModified()});
-    }
+    if (publishBatch && !batch.isEmpty()) publishBatch(std::move(batch));
 
     QCollator collator;
     collator.setNumericMode(true);
@@ -122,8 +183,9 @@ QVector<ImageFileRecord> DirectoryScanner::scanImageFoldersRecursively(const QSt
         supportedImageNameFilters(), QDir::Files | QDir::Readable | QDir::NoSymLinks, QDir::NoSort);
     result.reserve(directImages.size());
     for (const QFileInfo& image : directImages) {
+        if (!isBrowsableEntry(image)) continue;
         result.push_back({image.absoluteFilePath(), image.fileName(), image.size(),
-                          image.lastModified(), false});
+                          image.lastModified(), false, image.suffix().toCaseFolded()});
     }
 
     QSet<QString> imageFolders;
@@ -132,6 +194,7 @@ QVector<ImageFileRecord> DirectoryScanner::scanImageFoldersRecursively(const QSt
                           QDirIterator::Subdirectories);
     while (iterator.hasNext()) {
         const QFileInfo image(iterator.next());
+        if (!isBrowsableEntry(image)) continue;
         QString folder = QDir::cleanPath(image.absolutePath());
         if (folder == rootPath) {
             continue;
@@ -141,6 +204,8 @@ QVector<ImageFileRecord> DirectoryScanner::scanImageFoldersRecursively(const QSt
         // every branch that can lead to an image visible while excluding empty/document-only trees.
         while (normalizedAbsolutePath(folder) != normalizedRootPath &&
                isDescendantPath(root, folder)) {
+            const QFileInfo folderInfo(folder);
+            if (!isBrowsableEntry(folderInfo)) break;
             imageFolders.insert(folder);
             const QString parent = QDir::cleanPath(QFileInfo(folder).absolutePath());
             if (normalizedAbsolutePath(parent) == normalizedAbsolutePath(folder)) {
@@ -152,7 +217,8 @@ QVector<ImageFileRecord> DirectoryScanner::scanImageFoldersRecursively(const QSt
 
     for (const QString& folder : std::as_const(imageFolders)) {
         const QFileInfo info(folder);
-        result.push_back({folder, root.relativeFilePath(folder), 0, info.lastModified(), true});
+        result.push_back({folder, root.relativeFilePath(folder), 0, info.lastModified(), true,
+                          QStringLiteral("folder")});
     }
 
     QCollator collator;
@@ -169,10 +235,17 @@ QVector<ImageFileRecord> DirectoryScanner::scanImageFoldersRecursively(const QSt
 
 bool DirectoryScanner::isSupportedImageFile(const QString& path) {
     const QFileInfo info(path);
-    if (!info.isFile()) {
+    if (!isBrowsableEntry(info) || !info.isFile()) {
         return false;
     }
     return hasSupportedImageSuffix(info.fileName());
+}
+
+bool DirectoryScanner::isBrowsableEntry(const QFileInfo& info) {
+    const QString name = info.fileName();
+    return info.exists() && name != QStringLiteral(".") && name != QStringLiteral("..") &&
+           !name.startsWith(QLatin1Char('.')) && !info.isHidden() && !info.isSymLink() &&
+           info.isReadable();
 }
 
 } // namespace ispview

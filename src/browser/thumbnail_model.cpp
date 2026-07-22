@@ -1,16 +1,16 @@
 #include "browser/thumbnail_model.h"
 
 #include "io/image_loader.h"
-#include "io/raw_preset_store.h"
 
 #include <QFileInfo>
 #include <QIcon>
 #include <QLocale>
 #include <QMimeData>
 #include <QPainter>
-#include <QPointer>
+#include <QSet>
 #include <QUrl>
 
+#include <algorithm>
 #include <utility>
 
 namespace ispview {
@@ -44,11 +44,16 @@ QPixmap folderPlaceholder() {
 
 ThumbnailModel::ThumbnailModel(ImageLoader* loader, QObject* parent)
     : QAbstractListModel(parent), loader_(loader), placeholder_(textPlaceholder("Loading…")),
-      unavailablePlaceholder_(textPlaceholder("Parameters required")),
       folderPlaceholder_(folderPlaceholder()) {
     connect(loader_, &ImageLoader::rawParametersChanged, this,
-            [this](const QString& path) {
-                if (path != initializingRawParametersPath_) invalidateThumbnail(path);
+            [this](const QString& path) { invalidateThumbnail(path); });
+    connect(loader_, &ImageLoader::thumbnailMetadataReady, this,
+            [this](const QString& path, const QSize& sourceSize) {
+                const int row = pathToRow_.value(path, -1);
+                if (row < 0 || dimensions_.value(path) == sourceSize) return;
+                dimensions_.insert(path, sourceSize);
+                const QModelIndex changed = index(row);
+                emit dataChanged(changed, changed, {DimensionsRole, TechnicalLabelRole});
             });
 }
 
@@ -68,10 +73,6 @@ QVariant ThumbnailModel::data(const QModelIndex& index, int role) const {
         if (file.isDirectory) {
             return folderPlaceholder_;
         }
-        if (const auto it = thumbnails_.constFind(file.path); it != thumbnails_.cend()) {
-            return *it;
-        }
-        requestThumbnail(index.row());
         return placeholder_;
     case Qt::ToolTipRole:
         return file.isDirectory
@@ -88,16 +89,14 @@ QVariant ThumbnailModel::data(const QModelIndex& index, int role) const {
     case DirectoryRole:
         return file.isDirectory;
     case TypeRole:
-        return file.isDirectory ? QStringLiteral("Folder")
-                                : QFileInfo(file.fileName).suffix().toCaseFolded();
+        return file.isDirectory
+                   ? QStringLiteral("Folder")
+                   : file.fileType.isEmpty()
+                         ? QFileInfo(file.fileName).suffix().toCaseFolded()
+                         : file.fileType;
     case DimensionsRole:
         return dimensions_.value(file.path);
     case ThumbnailUrlRole: {
-        if (!file.isDirectory) {
-            // Asking for the QML URL also starts the existing asynchronous metadata path. This
-            // keeps the technical label updated without moving decode work into QML.
-            requestThumbnail(index.row());
-        }
         if (file.isDirectory) return QStringLiteral("qrc:/icons/ui/folder.svg");
         QString revision = QStringLiteral("%1-%2")
                                .arg(file.fileSize)
@@ -120,14 +119,16 @@ QVariant ThumbnailModel::data(const QModelIndex& index, int role) const {
             dimensions.isValid()
                 ? QStringLiteral("%1×%2").arg(dimensions.width()).arg(dimensions.height())
                 : QStringLiteral("Reading size…");
-        const QString type = QFileInfo(file.fileName).suffix().toUpper();
+        const QString type = (file.fileType.isEmpty() ? QFileInfo(file.fileName).suffix()
+                                                       : file.fileType)
+                                 .toUpper();
         return QStringLiteral("%1 · %2 · %3")
             .arg(dimensionText, type, formattedFileSize(file.fileSize));
     }
     case SelectedRole:
-        return selectedPaths_.contains(file.path);
+        return selectedOrdinals_.contains(file.path);
     case SelectionOrdinalRole:
-        return selectedPaths_.indexOf(file.path) + 1;
+        return selectedOrdinals_.value(file.path, 0);
     default:
         return {};
     }
@@ -154,6 +155,11 @@ void ThumbnailModel::setSelectedPaths(const QStringList& paths) {
         return;
     }
     const QStringList previous = std::exchange(selectedPaths_, paths);
+    selectedOrdinals_.clear();
+    selectedOrdinals_.reserve(selectedPaths_.size());
+    for (int ordinal = 0; ordinal < selectedPaths_.size(); ++ordinal) {
+        selectedOrdinals_.insert(selectedPaths_.at(ordinal), ordinal + 1);
+    }
     QSet<int> rows;
     for (const QString& path : previous) {
         const int row = pathToRow_.value(path, -1);
@@ -167,9 +173,15 @@ void ThumbnailModel::setSelectedPaths(const QStringList& paths) {
             rows.insert(row);
         }
     }
-    for (int row : std::as_const(rows)) {
-        const QModelIndex changed = index(row);
-        emit dataChanged(changed, changed, {SelectedRole, SelectionOrdinalRole});
+    QList<int> orderedRows = rows.values();
+    std::sort(orderedRows.begin(), orderedRows.end());
+    for (int offset = 0; offset < orderedRows.size();) {
+        const int first = orderedRows.at(offset);
+        int last = first;
+        while (++offset < orderedRows.size() && orderedRows.at(offset) == last + 1) {
+            last = orderedRows.at(offset);
+        }
+        emit dataChanged(index(first), index(last), {SelectedRole, SelectionOrdinalRole});
     }
 }
 
@@ -206,70 +218,95 @@ Qt::DropActions ThumbnailModel::supportedDragActions() const { return Qt::CopyAc
 void ThumbnailModel::setFiles(QVector<ImageFileRecord> files) {
     beginResetModel();
     files_ = std::move(files);
-    thumbnails_.clear();
     dimensions_.clear();
-    pending_.clear();
-    pendingRequestIds_.clear();
     rebuildPathIndex();
     endResetModel();
 }
 
+void ThumbnailModel::appendFiles(const QVector<ImageFileRecord>& files) {
+    if (files.isEmpty()) return;
+    const int first = static_cast<int>(files_.size());
+    const int last = first + static_cast<int>(files.size()) - 1;
+    beginInsertRows({}, first, last);
+    files_.reserve(files_.size() + files.size());
+    for (const ImageFileRecord& file : files) {
+        pathToRow_.insert(file.path, static_cast<int>(files_.size()));
+        files_.push_back(file);
+    }
+    endInsertRows();
+}
+
 void ThumbnailModel::updateFiles(const QVector<ImageFileRecord>& files) {
-    QSet<QString> incomingPaths;
-    incomingPaths.reserve(files.size());
-    for (const auto& file : files) {
-        incomingPaths.insert(file.path);
+    QHash<QString, ImageFileRecord> incomingByPath;
+    incomingByPath.reserve(files.size());
+    for (const auto& file : files) incomingByPath.insert(file.path, file);
+
+    int changedCount = 0;
+    for (const auto& existing : std::as_const(files_)) {
+        const auto incoming = incomingByPath.constFind(existing.path);
+        if (incoming == incomingByPath.cend() || existing.fileSize != incoming->fileSize ||
+            existing.modifiedAt != incoming->modifiedAt || existing.fileName != incoming->fileName) {
+            ++changedCount;
+        }
+    }
+    for (const auto& incoming : files) {
+        if (!pathToRow_.contains(incoming.path)) ++changedCount;
+    }
+    const int referenceCount = std::max(1, std::max(static_cast<int>(files_.size()),
+                                                    static_cast<int>(files.size())));
+    if (changedCount * 5 > referenceCount) {
+        QHash<QString, QSize> retainedDimensions;
+        for (const auto& incoming : files) {
+            const int oldRow = pathToRow_.value(incoming.path, -1);
+            if (oldRow < 0) continue;
+            const auto& old = files_.at(oldRow);
+            if (old.fileSize == incoming.fileSize && old.modifiedAt == incoming.modifiedAt &&
+                dimensions_.contains(incoming.path)) {
+                retainedDimensions.insert(incoming.path, dimensions_.value(incoming.path));
+            }
+        }
+        beginResetModel();
+        files_ = files;
+        dimensions_ = std::move(retainedDimensions);
+        rebuildPathIndex();
+        endResetModel();
+        return;
     }
 
     // Remove backwards so every existing persistent index before the removed row stays valid.
     for (qsizetype row = files_.size(); row-- > 0;) {
         const QString path = files_.at(row).path;
-        if (incomingPaths.contains(path)) {
+        if (incomingByPath.contains(path)) {
             continue;
         }
         beginRemoveRows({}, static_cast<int>(row), static_cast<int>(row));
         files_.removeAt(row);
-        thumbnails_.remove(path);
         dimensions_.remove(path);
-        pending_.remove(path);
-        pendingRequestIds_.remove(path);
         endRemoveRows();
     }
+    rebuildPathIndex();
 
-    // The scanner output is naturally sorted. Files that were renamed have already been
-    // removed above, so additions can be inserted directly at their final positions.
-    for (int row = 0; row < files.size(); ++row) {
-        const ImageFileRecord& incoming = files.at(row);
-        if (row >= files_.size() || files_.at(row).path != incoming.path) {
-            beginInsertRows({}, row, row);
-            files_.insert(row, incoming);
-            endInsertRows();
-            continue;
-        }
-
+    for (int row = 0; row < files_.size(); ++row) {
         ImageFileRecord& existing = files_[row];
+        const ImageFileRecord& incoming = incomingByPath.value(existing.path);
         const bool contentChanged =
             existing.fileSize != incoming.fileSize || existing.modifiedAt != incoming.modifiedAt;
         if (existing.fileName != incoming.fileName || contentChanged) {
             existing = incoming;
             if (contentChanged) {
-                thumbnails_.remove(incoming.path);
                 dimensions_.remove(incoming.path);
-                pending_.remove(incoming.path);
-                pendingRequestIds_.remove(incoming.path);
             }
             const QModelIndex changed = index(row);
             emit dataChanged(changed, changed);
         }
     }
 
-    if (files_.size() > files.size()) {
-        const int first = static_cast<int>(files.size());
-        const int last = static_cast<int>(files_.size()) - 1;
-        beginRemoveRows({}, first, last);
-        files_.remove(first, last - first + 1);
-        endRemoveRows();
+    QVector<ImageFileRecord> additions;
+    additions.reserve(changedCount);
+    for (const auto& incoming : files) {
+        if (!pathToRow_.contains(incoming.path)) additions.push_back(incoming);
     }
+    appendFiles(additions);
     rebuildPathIndex();
 }
 
@@ -278,10 +315,7 @@ QString ThumbnailModel::pathAt(int row) const {
 }
 
 void ThumbnailModel::invalidateThumbnail(const QString& path) {
-    thumbnails_.remove(path);
     dimensions_.remove(path);
-    pending_.remove(path);
-    pendingRequestIds_.remove(path);
     const int row = pathToRow_.value(path, -1);
     if (row >= 0) {
         const QModelIndex changed = index(row);
@@ -297,80 +331,6 @@ void ThumbnailModel::rebuildPathIndex() {
     for (int row = 0; row < files_.size(); ++row) {
         pathToRow_.insert(files_.at(row).path, row);
     }
-}
-
-void ThumbnailModel::requestThumbnail(int row) const {
-    if (row < 0 || row >= files_.size()) {
-        return;
-    }
-    const QString path = files_.at(row).path;
-    if (files_.at(row).isDirectory) {
-        return;
-    }
-    if (pending_.contains(path)) {
-        return;
-    }
-    const QString suffix = QFileInfo(path).suffix().toLower();
-    if ((suffix == QStringLiteral("raw") || suffix == QStringLiteral("yuv")) &&
-        !loader_->rawParameters(path)) {
-        std::optional<RawImageParameters> parameters = RawPresetStore::loadForFile(path);
-        if (!parameters) {
-            const RawImageParameters inferred = RawPresetStore::inferFromFileName(path);
-            if (availableFrameCount(QFileInfo(path).size(), inferred) > 0) {
-                parameters = inferred;
-            }
-        }
-        if (!parameters || availableFrameCount(QFileInfo(path).size(), *parameters) <= 0) {
-            thumbnails_.insert(path, unavailablePlaceholder_);
-            const QModelIndex changed = index(row);
-            emit const_cast<ThumbnailModel*>(this)->dataChanged(changed, changed,
-                                                                {Qt::DecorationRole});
-            return;
-        }
-        initializingRawParametersPath_ = path;
-        loader_->setRawParameters(path, *parameters);
-        initializingRawParametersPath_.clear();
-    }
-    pending_.insert(path);
-    const quint64 requestId = ++requestCounter_;
-    pendingRequestIds_.insert(path, requestId);
-    const QPointer<ThumbnailModel> self(const_cast<ThumbnailModel*>(this));
-    loader_->request(
-        requestId, {path, DecodePurpose::Thumbnail, {160, 120}},
-        [self, path](quint64 requestId, const DecodeResult& result) {
-            if (!self) {
-                return;
-            }
-            auto* model = self.data();
-            if (model->pendingRequestIds_.value(path) != requestId) {
-                return;
-            }
-            model->pending_.remove(path);
-            model->pendingRequestIds_.remove(path);
-            if (!result.frame || !result.frame->qImage()) {
-                model->thumbnails_.insert(path, model->unavailablePlaceholder_);
-                const int failedRow = model->pathToRow_.value(path, -1);
-                if (failedRow >= 0) {
-                    const QModelIndex changed = model->index(failedRow);
-                    emit model->dataChanged(changed, changed,
-                                            {Qt::DecorationRole, TechnicalLabelRole});
-                }
-                return;
-            }
-            model->thumbnails_.insert(path, QPixmap::fromImage(*result.frame->qImage()));
-            const QSize dimensions = result.frame->metadata.sourceSize.isValid()
-                                         ? result.frame->metadata.sourceSize
-                                         : result.frame->descriptor.size;
-            model->dimensions_.insert(path, dimensions);
-            const int row = model->pathToRow_.value(path, -1);
-            if (row >= 0) {
-                const QModelIndex changed = model->index(row);
-                emit model->dataChanged(changed, changed,
-                                        {Qt::DecorationRole, ThumbnailModel::DimensionsRole,
-                                         ThumbnailModel::TechnicalLabelRole});
-            }
-        },
-        -1);
 }
 
 } // namespace ispview

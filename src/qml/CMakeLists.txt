@@ -123,7 +123,6 @@ set_target_properties(ISPImageViewerQml PROPERTIES
     MACOSX_BUNDLE_GUI_IDENTIFIER "com.ispview.viewer"
     MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
     MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
-    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${PROJECT_SOURCE_DIR}/dist"
 )
 
 set(_ispview_qml_macos_icon "${PROJECT_SOURCE_DIR}/assets/icons/macos/ISPImageViewer.icns")

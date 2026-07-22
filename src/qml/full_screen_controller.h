@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/image_types.h"
+#include "io/image_loader.h"
 
 #include <QObject>
 #include <QPointer>
@@ -8,7 +9,6 @@
 
 namespace ispview {
 
-class ImageLoader;
 class QmlImageCanvas;
 
 // Owns a full-screen viewing session while the QML page owns every visual and interaction
@@ -70,6 +70,8 @@ class FullScreenController final : public QObject {
     bool loading_ = false;
     QString errorText_;
     ImageFramePtr frame_;
+    LoadHandle previewHandle_;
+    LoadHandle fullHandle_;
 };
 
 } // namespace ispview

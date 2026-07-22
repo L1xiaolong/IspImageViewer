@@ -9,6 +9,7 @@
 
 #include <QFileInfo>
 #include <QPointer>
+#include <QQuickWindow>
 #include <QSettings>
 #include <QThreadPool>
 
@@ -109,6 +110,8 @@ QString CompareController::cameraText(int slot) const {
 void CompareController::setPaths(const QStringList& requested) {
     const QStringList bounded = requested.mid(0, 4);
     if (bounded == paths_) return;
+    for (const LoadHandle& handle : previewHandles_) handle.cancel();
+    for (const LoadHandle& handle : fullHandles_) handle.cancel();
     paths_ = bounded;
     frames_.fill({}, paths_.size());
     errors_.fill({}, paths_.size());
@@ -116,6 +119,8 @@ void CompareController::setPaths(const QStringList& requested) {
     histogramGenerations_.fill(0, paths_.size());
     histogramRequested_.fill(false, paths_.size());
     displayHistograms_.fill({}, paths_.size());
+    previewHandles_.fill({}, paths_.size());
+    fullHandles_.fill({}, paths_.size());
     holdCandidate_ = false;
     emit pathsChanged();
     emit holdCandidateChanged();
@@ -136,8 +141,15 @@ void CompareController::requestFrame(int slot, const QString& path) {
         if (rawParameters) loader_->setRawParameters(path, *rawParameters);
     }
     const quint64 generation = ++generations_[slot];
+    const qreal dpr = canvas_ && canvas_->window() ? canvas_->window()->devicePixelRatio() : 1.0;
+    const int slotCount = std::max(1, static_cast<int>(paths_.size()));
+    QSize previewSize = canvas_ ? QSize(qRound(canvas_->width() * dpr / slotCount),
+                                       qRound(canvas_->height() * dpr))
+                                : QSize(1280, 1000);
+    previewSize = previewSize.expandedTo(QSize(640, 480)).boundedTo(QSize(1920, 1600));
     const QPointer<CompareController> self(this);
-    loader_->request(generation, {path, DecodePurpose::Preview, QSize(2560, 1600), rawParameters},
+    previewHandles_[slot] = loader_->request(
+        generation, {path, DecodePurpose::Preview, previewSize, rawParameters},
         [self, slot, path, generation, rawParameters](quint64 id, const DecodeResult& result) {
             if (!self || id != generation || self->generations_.at(slot) != generation) return;
             if (!result.frame) {
@@ -155,7 +167,8 @@ void CompareController::requestFrame(int slot, const QString& path) {
             emit self->frameChanged(slot, false);
             ++self->revision_;
             emit self->revisionChanged();
-            self->loader_->request(generation, {path, DecodePurpose::Full, {}, rawParameters},
+            self->fullHandles_[slot] = self->loader_->request(
+                generation, {path, DecodePurpose::Full, {}, rawParameters},
                 [self, slot, generation](quint64 fullId, const DecodeResult& full) {
                     if (!self || fullId != generation || self->generations_.at(slot) != generation || !full.frame) return;
                     self->frames_[slot] = full.frame;
@@ -165,8 +178,10 @@ void CompareController::requestFrame(int slot, const QString& path) {
                     emit self->frameChanged(slot, true);
                     ++self->revision_;
                     emit self->revisionChanged();
-                }, 1);
-        }, 3);
+                }, RequestOptions{LoadCategory::Interactive, 0,
+                                  QStringLiteral("compare-full")});
+        }, RequestOptions{LoadCategory::Interactive, 20,
+                          QStringLiteral("compare-preview")});
 }
 
 void CompareController::setPresentationMode(int mode) {
@@ -291,7 +306,7 @@ void CompareController::requestHistogram(int slot) {
         QMetaObject::invokeMethod(self.data(), [self, slot, generation, result] {
             if (self) self->completeHistogram(slot, generation, result);
         }, Qt::QueuedConnection);
-    });
+    }, -20);
 }
 
 QVariantMap CompareController::histogram(int slot) const {

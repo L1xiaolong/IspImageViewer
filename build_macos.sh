@@ -4,40 +4,70 @@ set -euo pipefail
 print_usage() {
     cat <<'EOF'
 Usage:
-  ./build_macos.sh [debug|release] [--test] [--rhi] [--clean] [-j N]
+  ./build_macos.sh [dev|debug|release|package] [options]
+
+Commands:
+  dev, debug  Build a Debug app under build/ (default; never writes dist/).
+  release     Build a Release app under build/ (never writes dist/).
+  package     Build Release, deploy dependencies, sign, verify, and write dist/.
 
 Examples:
-  ./build_macos.sh
-  ./build_macos.sh debug --test
+  ./build_macos.sh dev --test
   ./build_macos.sh release -j 8
+  ./build_macos.sh package
+  ./build_macos.sh package --sign "Developer ID Application: Example (TEAMID)"
 
 Options:
-  debug      Build the macos-debug CMake preset. This is the default.
-  release    Build the macos-release CMake preset.
-  --test     Run the matching CTest preset when available.
-  --rhi      Run the native Metal RHI acceptance test. Intended for Debug builds.
-  --clean    Remove the selected preset build directory before configuring.
-  -j N       Parallel build jobs. Defaults to the number of local CPU cores.
-  -h,--help  Show this help.
+  --test       Run CTest when using a Debug build.
+  --rhi        Run the native Metal RHI acceptance test.
+  --clean      Remove the selected build directory before configuring.
+  --sign ID    Code-sign a package with ID. Default is an ad-hoc local signature.
+  --no-zip     Do not create the distributable ZIP in package mode.
+  -j N         Parallel build jobs. Defaults to the local CPU count.
+  -h,--help    Show this help.
+
+Outputs:
+  dev/debug  build/macos-preset-debug/src/qml/ISPImageViewer.app
+  release    build/macos-preset-release/src/qml/ISPImageViewer.app
+  package    dist/ISPImageViewer.app and dist/ISPImageViewer-<version>-macos-<arch>.zip
 EOF
 }
 
+command_name="dev"
 mode="debug"
 run_tests=0
 run_rhi=0
 clean=0
+create_zip=1
+sign_identity="${ISPVIEW_CODESIGN_IDENTITY:--}"
 jobs="$(sysctl -n hw.ncpu 2>/dev/null || echo 6)"
 
-while [[ $# -gt 0 ]]; do
+if [[ $# -gt 0 ]]; then
     case "$1" in
-        debug|Debug|DEBUG)
+        dev|debug|Debug|DEBUG)
+            command_name="dev"
             mode="debug"
             shift
             ;;
         release|Release|RELEASE)
+            command_name="release"
             mode="release"
             shift
             ;;
+        package|Package|PACKAGE)
+            command_name="package"
+            mode="release"
+            shift
+            ;;
+        -h|--help)
+            print_usage
+            exit 0
+            ;;
+    esac
+fi
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
         --test)
             run_tests=1
             shift
@@ -50,11 +80,17 @@ while [[ $# -gt 0 ]]; do
             clean=1
             shift
             ;;
+        --sign)
+            [[ $# -ge 2 ]] || { echo "Missing identity after --sign" >&2; exit 2; }
+            sign_identity="$2"
+            shift 2
+            ;;
+        --no-zip)
+            create_zip=0
+            shift
+            ;;
         -j)
-            if [[ $# -lt 2 ]]; then
-                echo "Missing value after -j" >&2
-                exit 2
-            fi
+            [[ $# -ge 2 ]] || { echo "Missing value after -j" >&2; exit 2; }
             jobs="$2"
             shift 2
             ;;
@@ -79,25 +115,30 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "$script_dir"
 
 preset="macos-${mode}"
-build_dir="build/macos-preset-${mode}"
+build_dir="$script_dir/build/macos-preset-${mode}"
+built_app="$build_dir/src/qml/ISPImageViewer.app"
 
 if [[ "$clean" -eq 1 ]]; then
-    echo "Removing $build_dir"
+    echo "Removing build directory: $build_dir"
     rm -rf "$build_dir"
 fi
 
 echo "Configuring preset: $preset"
 cmake --preset "$preset"
-
 echo "Building preset: $preset (-j $jobs)"
 cmake --build --preset "$preset" -j "$jobs"
+
+if [[ ! -d "$built_app" ]]; then
+    echo "Expected app bundle was not produced: $built_app" >&2
+    exit 1
+fi
 
 if [[ "$run_tests" -eq 1 ]]; then
     if [[ "$mode" == "debug" ]]; then
         echo "Running tests: macos-debug"
         ctest --preset macos-debug --output-on-failure
     else
-        echo "Release preset does not define a CTest preset; skipping --test for release."
+        echo "Release builds do not enable CTest; skipping --test."
     fi
 fi
 
@@ -106,8 +147,132 @@ if [[ "$run_rhi" -eq 1 ]]; then
     ctest --preset macos-rhi-acceptance --output-on-failure
 fi
 
-if [[ "$mode" == "debug" ]]; then
-    echo "App bundle: $script_dir/build/macos-preset-debug/src/ISPImageViewerDebug.app"
+if [[ "$command_name" != "package" ]]; then
+    echo "Development artifact: $built_app"
+    echo "dist/ was not modified."
+    exit 0
+fi
+
+for tool_name in macdeployqt qtpaths otool install_name_tool codesign ditto; do
+    command -v "$tool_name" >/dev/null 2>&1 || {
+        echo "Required packaging tool is missing: $tool_name" >&2
+        exit 1
+    }
+done
+
+stage_dir="$(mktemp -d /tmp/ispview-package.XXXXXX)"
+trap 'rm -rf "$stage_dir"' EXIT
+staged_app="$stage_dir/ISPImageViewer.app"
+ditto "$built_app" "$staged_app"
+
+echo "Deploying Qt and QML dependencies"
+deploy_log="$stage_dir/macdeployqt.log"
+if ! macdeployqt "$staged_app" \
+    -qmldir="$script_dir/src/qml" \
+    -always-overwrite \
+    -verbose=0 >"$deploy_log" 2>&1; then
+    echo "macdeployqt failed; last 80 log lines:" >&2
+    tail -n 80 "$deploy_log" >&2
+    exit 1
+fi
+
+# Homebrew Qt 6.9's macdeployqt can omit frameworks referenced only by QML
+# plug-ins. Copy the small, actually used Controls/Dialogs dependency closure.
+qt_lib_dir="$(qtpaths --query QT_INSTALL_LIBS)"
+required_frameworks=(
+    QtDBus.framework
+    QtQmlCore.framework
+    QtQuickControls2Basic.framework
+    QtQuickControls2BasicStyleImpl.framework
+    QtQuickControls2Impl.framework
+    QtQuickDialogs2.framework
+    QtQuickDialogs2QuickImpl.framework
+    QtQuickDialogs2Utils.framework
+)
+
+for framework_name in "${required_frameworks[@]}"; do
+    framework_source="$qt_lib_dir/$framework_name"
+    framework_target="$staged_app/Contents/Frameworks/$framework_name"
+    if [[ ! -d "$framework_source" ]]; then
+        echo "Required Qt framework is missing: $framework_source" >&2
+        exit 1
+    fi
+    if [[ ! -d "$framework_target" ]]; then
+        ditto "$framework_source" "$framework_target"
+    fi
+done
+
+qt_dbus_binary="$staged_app/Contents/Frameworks/QtDBus.framework/Versions/A/QtDBus"
+dbus_source="$(otool -L "$qt_dbus_binary" \
+    | awk '$1 ~ /libdbus-1/ && $1 ~ /\.dylib/ { print $1; exit }')"
+if [[ -n "$dbus_source" && "$dbus_source" == /* ]]; then
+    if [[ ! -f "$dbus_source" ]]; then
+        echo "QtDBus dependency is missing: $dbus_source" >&2
+        exit 1
+    fi
+    dbus_name="$(basename "$dbus_source")"
+    dbus_target="$staged_app/Contents/Frameworks/$dbus_name"
+    cp "$dbus_source" "$dbus_target"
+    chmod u+w "$dbus_target"
+    install_name_tool -change "$dbus_source" \
+        "@executable_path/../Frameworks/$dbus_name" "$qt_dbus_binary"
+    install_name_tool -id "@executable_path/../Frameworks/$dbus_name" "$dbus_target"
+fi
+
+app_binary="$staged_app/Contents/MacOS/ISPImageViewer"
+while IFS= read -r existing_rpath; do
+    case "$existing_rpath" in
+        /opt/homebrew/*|/usr/local/*)
+            install_name_tool -delete_rpath "$existing_rpath" "$app_binary"
+            ;;
+    esac
+done < <(otool -l "$app_binary" | awk '/LC_RPATH/ { getline; getline; print $2 }')
+
+if ! otool -l "$app_binary" | awk '/LC_RPATH/ { getline; getline; print $2 }' \
+    | grep -Fxq '@executable_path/../Frameworks'; then
+    install_name_tool -add_rpath '@executable_path/../Frameworks' "$app_binary"
+fi
+
+chmod -R u+w "$staged_app"
+xattr -cr "$staged_app" 2>/dev/null || true
+
+if [[ "$sign_identity" == "-" ]]; then
+    echo "Applying ad-hoc local-test signature"
+    codesign --force --deep --sign - \
+        --entitlements "$script_dir/packaging/macos-local.entitlements" \
+        "$staged_app"
 else
-    echo "App bundle: $script_dir/build/macos-preset-release/src/ISPImageViewer.app"
+    echo "Signing with: $sign_identity"
+    codesign --force --deep --options runtime --timestamp \
+        --sign "$sign_identity" "$staged_app"
+fi
+
+codesign --verify --deep --strict --verbose=2 "$staged_app"
+if otool -L "$app_binary" | grep -Eq '/opt/homebrew|/usr/local'; then
+    echo "The packaged executable still references a local package-manager path." >&2
+    exit 1
+fi
+
+version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
+    "$staged_app/Contents/Info.plist")"
+architecture="$(uname -m)"
+dist_dir="$script_dir/dist"
+dist_app="$dist_dir/ISPImageViewer.app"
+zip_name="ISPImageViewer-${version}-macos-${architecture}.zip"
+zip_path="$dist_dir/$zip_name"
+
+mkdir -p "$dist_dir"
+rm -rf "$dist_app"
+ditto "$staged_app" "$dist_app"
+
+if [[ "$create_zip" -eq 1 ]]; then
+    rm -f "$zip_path"
+    ditto -c -k --sequesterRsrc --keepParent "$dist_app" "$zip_path"
+    echo "SHA-256: $(shasum -a 256 "$zip_path" | awk '{print $1}')"
+    echo "Distributable ZIP: $zip_path"
+fi
+
+echo "Distributable app: $dist_app"
+if [[ "$sign_identity" == "-" ]]; then
+    echo "Note: this package is ad-hoc signed. Use --sign with a Developer ID for public distribution."
 fi

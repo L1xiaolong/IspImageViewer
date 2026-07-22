@@ -21,6 +21,7 @@
 #include <QTest>
 
 #include <cmath>
+#include <atomic>
 #include <memory>
 
 namespace ispview {
@@ -31,6 +32,7 @@ class RawParameterColorDecoder final : public IImageDecoder {
     [[nodiscard]] bool canDecode(const QString&) const override { return true; }
 
     [[nodiscard]] DecodeResult decode(const DecodeRequest& request) const override {
+        calls.fetch_add(1, std::memory_order_relaxed);
         QImage image(8, 8, QImage::Format_RGBA8888);
         image.fill(request.rawParameters && request.rawParameters->size.width() == 4
                        ? QColor(Qt::red) : QColor(Qt::green));
@@ -42,6 +44,8 @@ class RawParameterColorDecoder final : public IImageDecoder {
         frame->storage = std::move(image);
         return {std::move(frame), {}};
     }
+
+    mutable std::atomic<int> calls{0};
 };
 
 BrowseController* paneAt(const BrowseWorkspaceController& workspace, int index) {
@@ -297,6 +301,7 @@ void QmlWorkspaceControllerTests::rawParametersRefreshEveryPaneAndQmlProvider() 
         indexForPath(paneAt(workspace, 0)).data(ThumbnailModel::ThumbnailUrlRole).toString();
     const QString beforeSecond =
         indexForPath(paneAt(workspace, 1)).data(ThumbnailModel::ThumbnailUrlRole).toString();
+    QCOMPARE(decoder->calls.load(std::memory_order_relaxed), 0);
 
     RawImageParameters parameters;
     parameters.size = {4, 4};
@@ -317,6 +322,7 @@ void QmlWorkspaceControllerTests::rawParametersRefreshEveryPaneAndQmlProvider() 
     QImage firstImage = provider.requestImage(encodedPath + QStringLiteral("?v=first"), nullptr,
                                               QSize(16, 16));
     QCOMPARE(firstImage.pixelColor(0, 0), QColor(Qt::red));
+    QCOMPARE(decoder->calls.load(std::memory_order_relaxed), 1);
 
     parameters.size = {8, 4};
     parameters.rowStride = 16;
@@ -327,6 +333,7 @@ void QmlWorkspaceControllerTests::rawParametersRefreshEveryPaneAndQmlProvider() 
     QImage refreshedImage = provider.requestImage(encodedPath + QStringLiteral("?v=second"),
                                                   nullptr, QSize(16, 16));
     QCOMPARE(refreshedImage.pixelColor(0, 0), QColor(Qt::green));
+    QCOMPARE(decoder->calls.load(std::memory_order_relaxed), 2);
 }
 
 void QmlWorkspaceControllerTests::browseFileDialogsAreRequestedByQmlAndActionsStayInBackend() {

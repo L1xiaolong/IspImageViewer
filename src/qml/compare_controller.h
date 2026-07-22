@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/image_types.h"
+#include "io/image_loader.h"
 #include <QObject>
 #include <QStringList>
 #include <QVector>
@@ -9,7 +10,6 @@
 
 namespace ispview {
 
-class ImageLoader;
 class QmlImageCanvas;
 
 // Presentation-independent comparison session. It owns exactly the same
@@ -105,6 +105,8 @@ class CompareController final : public QObject {
     QVector<quint64> histogramGenerations_;
     QVector<bool> histogramRequested_;
     QVector<QVariantMap> displayHistograms_;
+    QVector<LoadHandle> previewHandles_;
+    QVector<LoadHandle> fullHandles_;
 };
 
 } // namespace ispview

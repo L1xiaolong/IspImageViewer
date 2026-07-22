@@ -25,48 +25,30 @@ Rectangle {
         folderTree.expandToIndex(root.controller.currentFolderTreeIndex)
     }
 
-    Timer {
-        id: treeRevealTimer
-        interval: 180
-        repeat: true
-        property int remaining: 0
-        onTriggered: {
-            root.revealCurrentFolder()
-            remaining -= 1
-            if (remaining <= 0)
-                stop()
-        }
+    Connections {
+        target: root.controller
+        function onCurrentDirectoryChanged() { root.revealCurrentFolder() }
     }
 
     Connections {
-        target: root.controller
-        function onCurrentDirectoryChanged() {
-            root.revealCurrentFolder()
-            treeRevealTimer.remaining = 3
-            treeRevealTimer.restart()
+        target: root.designMode ? null : root.controller.folderTree
+        function onDirectoryLoaded(path) {
+            if (root.controller.currentDirectory.startsWith(path))
+                root.revealCurrentFolder()
         }
     }
 
-    Component.onCompleted: {
-        root.revealCurrentFolder()
-        treeRevealTimer.remaining = 3
-        treeRevealTimer.start()
-    }
+    Component.onCompleted: root.revealCurrentFolder()
 
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 12
         spacing: 10
 
-        ScrollView {
+        Column {
+            id: navigationColumn
             Layout.fillWidth: true
-            Layout.fillHeight: true
-            clip: true
-
-            Column {
-                id: navigationColumn
-                width: root.width - 24
-                spacing: 2
+            spacing: 2
 
                 Text {
                     text: "RECENT"
@@ -110,20 +92,22 @@ Rectangle {
                         }
                     }
                 }
-                Text {
-                    text: "PROJECT TREE"
-                    color: Theme.mutedInk
-                    font.family: Theme.monoFont
-                    font.pixelSize: 11
-                    leftPadding: 6
-                    topPadding: 12
-                    bottomPadding: 4
-                }
+        }
 
-                TreeView {
+        Text {
+            text: "PROJECT TREE"
+            color: Theme.mutedInk
+            font.family: Theme.monoFont
+            font.pixelSize: 11
+            leftPadding: 6
+            topPadding: 8
+            bottomPadding: 2
+        }
+
+        TreeView {
                     id: folderTree
-                    width: root.width - 24
-                    height: Math.max(280, contentHeight)
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
                     model: root.controller.folderTree
                     rootIndex: root.designMode ? undefined : root.controller.folderRootIndex
                     columnWidthProvider: function (column) {
@@ -186,8 +170,6 @@ Rectangle {
                                 treeDelegate.treeView.toggleExpanded(treeDelegate.row)
                         }
                     }
-                }
-            }
         }
     }
 }

@@ -6,7 +6,6 @@
 #include <QHash>
 #include <QMimeData>
 #include <QPixmap>
-#include <QSet>
 
 namespace ispview {
 
@@ -42,6 +41,7 @@ class ThumbnailModel final : public QAbstractListModel {
     [[nodiscard]] Qt::DropActions supportedDragActions() const override;
 
     void setFiles(QVector<ImageFileRecord> files);
+    void appendFiles(const QVector<ImageFileRecord>& files);
     void updateFiles(const QVector<ImageFileRecord>& files);
     void invalidateThumbnail(const QString& path);
     void setSelectedPaths(const QStringList& paths);
@@ -49,21 +49,15 @@ class ThumbnailModel final : public QAbstractListModel {
     [[nodiscard]] const QVector<ImageFileRecord>& files() const { return files_; }
 
   private:
-    void requestThumbnail(int row) const;
     void rebuildPathIndex();
 
     ImageLoader* loader_;
     QVector<ImageFileRecord> files_;
     QHash<QString, int> pathToRow_;
-    mutable QHash<QString, QPixmap> thumbnails_;
     mutable QHash<QString, QSize> dimensions_;
-    mutable QSet<QString> pending_;
-    mutable QHash<QString, quint64> pendingRequestIds_;
-    mutable QString initializingRawParametersPath_;
     QStringList selectedPaths_;
-    mutable quint64 requestCounter_ = 0;
+    QHash<QString, int> selectedOrdinals_;
     QPixmap placeholder_;
-    QPixmap unavailablePlaceholder_;
     QPixmap folderPlaceholder_;
 };
 

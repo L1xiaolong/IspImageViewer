@@ -236,6 +236,7 @@ ImagePropertiesController::ImagePropertiesController(ImageLoader* loader, QObjec
 }
 
 void ImagePropertiesController::loadPath(const QString& requestedPath) {
+    loadHandle_.cancel();
     const QFileInfo info(requestedPath);
     path_ = info.absoluteFilePath();
     fileName_ = info.fileName().isEmpty() ? QDir::toNativeSeparators(path_) : info.fileName();
@@ -267,7 +268,7 @@ void ImagePropertiesController::loadPath(const QString& requestedPath) {
 
     const quint64 generation = loadGeneration_;
     const QPointer<ImagePropertiesController> self(this);
-    loader_->request(generation, {path_, DecodePurpose::Full, {}},
+    loadHandle_ = loader_->request(generation, {path_, DecodePurpose::Full, {}},
                      [self, generation](quint64 id, const DecodeResult& result) {
         if (!self || id != generation || self->loadGeneration_ != generation) return;
         self->loading_ = false;
@@ -277,7 +278,7 @@ void ImagePropertiesController::loadPath(const QString& requestedPath) {
             return;
         }
         self->setFrame(result.frame);
-    }, 1);
+    }, RequestOptions{LoadCategory::Metadata, 10, QStringLiteral("properties")});
 }
 
 void ImagePropertiesController::setFrame(ImageFramePtr frame) {
@@ -387,7 +388,7 @@ void ImagePropertiesController::requestHistogram(int source) {
         QMetaObject::invokeMethod(self.data(), [self, source, requestedGeneration, result] {
             if (self) self->setHistogram(source, requestedGeneration, result);
         }, Qt::QueuedConnection);
-    });
+    }, -20);
 }
 
 QVariantMap ImagePropertiesController::histogram(int source) const {

@@ -105,12 +105,17 @@ current lightweight MVP. They are not listed by the browser or accepted by the e
 Recommended wrapper:
 
 ```sh
-./build_macos.sh debug --test
+./build_macos.sh dev --test
 ./build_macos.sh release
+./build_macos.sh package
 ```
 
-The wrapper configures and builds the matching CMake preset. Use `./build_macos.sh --help` for
-`--clean`, `--rhi`, and `-j N`.
+`dev` and `release` only write to `build/`; they never replace a distributable. `package` builds
+Release in `build/`, stages and verifies a self-contained app, then writes
+`dist/ISPImageViewer.app` and a versioned ZIP. The default package uses an ad-hoc local signature;
+use `--sign "Developer ID Application: ..."` for a package intended for public distribution.
+`debug` remains an alias for `dev`. Use `./build_macos.sh --help` for `--clean`, `--rhi`, `--no-zip`,
+and `-j N`.
 
 Equivalent raw CMake commands:
 
@@ -120,7 +125,8 @@ cmake --build --preset macos-debug
 ctest --preset macos-debug
 ```
 
-The application bundle is generated under `build/macos-preset-debug/src`.
+Development bundles are generated under `build/macos-preset-debug/src/qml` or
+`build/macos-preset-release/src/qml`.
 
 Repeatable CPU decode, histogram, and color-management benchmarks are built by the Release presets:
 
@@ -129,6 +135,7 @@ cmake --build --preset macos-release
 ./build/macos-preset-release/tools/ispview_raw_benchmark --48mp
 ./build/macos-preset-release/tools/ispview_histogram_benchmark --48mp
 ./build/macos-preset-release/tools/ispview_color_benchmark --48mp
+./build/macos-preset-release/tools/ispview_browser_benchmark --enforce
 ./build/macos-preset-release/tools/ispview_sample_check --allow-incomplete test_images
 ./build/macos-preset-release/tools/ispview_sample_check --allow-incomplete \
   --candidate-raw16 6236x4178:14:RGGB --orientation 180 test_images
@@ -153,18 +160,27 @@ candidate. It changes display geometry and rendering while probes continue to re
 source pixel from the immutable Plane.
 Local `test_images` data is intentionally ignored by Git.
 
+`ispview_browser_benchmark` creates a temporary 10,000-visible-entry directory with 3,000 JPEGs
+plus hidden files and hidden directory trees. It reports first-batch, complete-scan, first-thumbnail,
+first-viewport, and peak-resident-memory metrics as JSON. `--quick` uses one tenth of the fixture;
+`--enforce` applies the release performance gates documented by the project. Fixture preparation is
+excluded from all timings and the temporary directory is removed automatically.
+
 ## Build on Windows
 
 The supported local validation path is MSYS2/UCRT64 GCC + Ninja:
 
 ```pwsh
 $env:MSYS2_UCRT64 = (& qmake -query QT_INSTALL_PREFIX).Trim()
-.\build_windows.ps1 -Toolchain msys2 -Mode debug -Test
+.\build_windows.ps1 -Toolchain msys2 -Mode dev -Test
 .\build_windows.ps1 -Toolchain msys2 -Mode release
+.\build_windows.ps1 -Toolchain msys2 -Mode package
 ```
 
 The wrapper configures and builds a Ninja tree under `build/windows-msys2-debug` or
-`build/windows-msys2-release`. Use `.\build_windows.ps1 -Help` for `-Clean`, `-Jobs N`,
+`build/windows-msys2-release`. `dev` and `release` leave `dist/` untouched. `package` runs
+`windeployqt`, recursively copies non-system MSYS2 DLL dependencies, and writes a versioned ZIP
+under `dist/`. Use `.\build_windows.ps1 -Help` for `-Clean`, `-NoZip`, `-Jobs N`,
 `-Msys2Ucrt64`, and the legacy `-Toolchain msvc` option.
 
 Equivalent raw CMake commands:

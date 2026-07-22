@@ -2,6 +2,7 @@
 
 #include "core/image_types.h"
 #include "browser/thumbnail_filter_proxy_model.h"
+#include "io/image_loader.h"
 
 #include <QFileSystemModel>
 #include <QModelIndex>
@@ -21,7 +22,6 @@ namespace ispview {
 class DirectoryScanner;
 class FullScreenWindow;
 class IImageDecoder;
-class ImageLoader;
 class ThumbnailModel;
 
 // QML-facing application service for the Browse design. Filesystem work remains in C++ so the
@@ -164,6 +164,7 @@ class BrowseController final : public QObject {
     QFileSystemModel* fileSystemModel_ = nullptr;
     QFileSystemWatcher* directoryWatcher_ = nullptr;
     QTimer* refreshTimer_ = nullptr;
+    QTimer* refreshDeadlineTimer_ = nullptr;
     QTimer* recentCandidateTimer_ = nullptr;
     QString currentDirectory_;
     QString recentCandidateDirectory_;
@@ -174,6 +175,7 @@ class BrowseController final : public QObject {
     QString filterText_;
     int navigationHistoryIndex_ = -1;
     quint64 scanGeneration_ = 0;
+    bool incrementalScan_ = false;
     quint64 galleryRequestId_ = 0;
     int gridCellWidth_ = 196;
     int displayMode_ = 0;
@@ -182,6 +184,7 @@ class BrowseController final : public QObject {
     QString galleryInfoText_;
     QSize galleryImageSize_;
     ImageFramePtr galleryFrame_;
+    LoadHandle galleryLoadHandle_;
 };
 
 } // namespace ispview

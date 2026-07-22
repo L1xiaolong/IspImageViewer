@@ -1,6 +1,6 @@
 param(
-    [ValidateSet("debug", "release")]
-    [string]$Mode = "debug",
+    [ValidateSet("dev", "debug", "release", "package")]
+    [string]$Mode = "dev",
 
     [ValidateSet("msys2", "msvc")]
     [string]$Toolchain = "msys2",
@@ -9,6 +9,7 @@ param(
 
     [switch]$Test,
     [switch]$Clean,
+    [switch]$NoZip,
     [int]$Jobs = [Environment]::ProcessorCount,
     [switch]$Help
 )
@@ -18,21 +19,142 @@ $ErrorActionPreference = "Stop"
 function Show-Usage {
     Write-Host @"
 Usage:
-  .\build_windows.ps1 [-Toolchain msys2|msvc] [-Mode debug|release] [-Test] [-Clean] [-Jobs N]
+  .\build_windows.ps1 [-Mode dev|debug|release|package] [options]
+
+Commands:
+  dev, debug  Build Debug under build\ (default; never writes dist\).
+  release     Build Release under build\ (never writes dist\).
+  package     Build Release, deploy DLL/QML dependencies, and write dist\.
 
 Examples:
-  .\build_windows.ps1 -Toolchain msys2 -Mode debug -Test
-  .\build_windows.ps1 -Toolchain msys2 -Mode release -Jobs 8
-  .\build_windows.ps1 -Toolchain msvc -Mode debug -Test
+  .\build_windows.ps1 -Mode dev -Test
+  .\build_windows.ps1 -Mode release -Jobs 8
+  .\build_windows.ps1 -Mode package -Toolchain msys2
 
 Options:
-  -Toolchain msys2|msvc  Use MSYS2/UCRT64 Ninja (default) or the legacy Visual Studio preset.
-  -Mode debug|release  Select the build configuration. Default: debug.
-  -Msys2Ucrt64 PATH     MSYS2 UCRT64 prefix; defaults to MSYS2_UCRT64 or qmake discovery.
-  -Test                Run the matching CTest preset when available.
-  -Clean               Remove the selected preset build directory before configuring.
-  -Jobs N              Parallel build jobs. Default: CPU core count.
+  -Toolchain msys2|msvc  Use MSYS2/UCRT64 Ninja (default) or Visual Studio.
+  -Msys2Ucrt64 PATH      MSYS2 UCRT64 prefix.
+  -Test                  Run CTest for a Debug build.
+  -Clean                 Remove the selected build directory first.
+  -NoZip                 Do not create a ZIP in package mode.
+  -Jobs N                Parallel build jobs. Default: CPU core count.
+
+Outputs:
+  dev/release  build\windows-* only
+  package      dist\ISPImageViewer-windows-x64 and a versioned ZIP
 "@
+}
+
+function Find-ApplicationExecutable {
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    $candidate = Get-ChildItem -LiteralPath $Root -Filter "ISPImageViewer.exe" -File -Recurse |
+        Where-Object { $_.FullName -notmatch "CMakeFiles|_autogen|tests" } |
+        Select-Object -First 1
+    if ($null -eq $candidate) {
+        throw "ISPImageViewer.exe was not produced under $Root"
+    }
+    return $candidate.FullName
+}
+
+function Find-WinDeployQt {
+    param([string]$QtBin)
+
+    foreach ($name in @("windeployqt6.exe", "windeployqt.exe")) {
+        if (-not [string]::IsNullOrWhiteSpace($QtBin)) {
+            $candidate = Join-Path $QtBin $name
+            if (Test-Path -LiteralPath $candidate) { return $candidate }
+        }
+        $command = Get-Command $name -ErrorAction SilentlyContinue
+        if ($null -ne $command) { return $command.Source }
+    }
+    throw "windeployqt was not found. Add the selected Qt bin directory to PATH."
+}
+
+function Copy-Msys2DependencyClosure {
+    param(
+        [Parameter(Mandatory = $true)][string]$TargetDir,
+        [Parameter(Mandatory = $true)][string]$Prefix
+    )
+
+    $prefixBin = Join-Path $Prefix "bin"
+    $objdump = Join-Path $prefixBin "objdump.exe"
+    if (-not (Test-Path -LiteralPath $objdump)) {
+        $command = Get-Command objdump.exe -ErrorAction SilentlyContinue
+        if ($null -eq $command) {
+            throw "objdump.exe is required to deploy the MSYS2 DLL dependency closure."
+        }
+        $objdump = $command.Source
+    }
+
+    $queue = [System.Collections.Generic.Queue[string]]::new()
+    $visited = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase)
+    Get-ChildItem -LiteralPath $TargetDir -File -Recurse |
+        Where-Object { $_.Extension -in @(".exe", ".dll") } |
+        ForEach-Object { $queue.Enqueue($_.FullName) }
+
+    while ($queue.Count -gt 0) {
+        $binary = $queue.Dequeue()
+        if (-not $visited.Add($binary)) { continue }
+
+        foreach ($line in (& $objdump -p $binary 2>$null)) {
+            if ($line -notmatch "DLL Name:\s*(.+\.dll)\s*$") { continue }
+            $dllName = $Matches[1].Trim()
+            $target = Join-Path $TargetDir $dllName
+            if (Test-Path -LiteralPath $target) { continue }
+
+            $source = Join-Path $prefixBin $dllName
+            if (Test-Path -LiteralPath $source) {
+                Copy-Item -LiteralPath $source -Destination $target
+                $queue.Enqueue($target)
+            }
+        }
+    }
+}
+
+function Publish-WindowsPackage {
+    param(
+        [Parameter(Mandatory = $true)][string]$Executable,
+        [Parameter(Mandatory = $true)][string]$QtBin,
+        [string]$MsysPrefix
+    )
+
+    $stageDir = Join-Path $ScriptDir "build\package-windows-staging"
+    $distDir = Join-Path $ScriptDir "dist\ISPImageViewer-windows-x64"
+    if (Test-Path -LiteralPath $stageDir) {
+        Remove-Item -LiteralPath $stageDir -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $stageDir | Out-Null
+
+    $targetExe = Join-Path $stageDir "ISPImageViewer.exe"
+    Copy-Item -LiteralPath $Executable -Destination $targetExe
+    $deployQt = Find-WinDeployQt -QtBin $QtBin
+    Write-Host "Deploying Qt and QML dependencies with $deployQt"
+    & $deployQt --release --compiler-runtime --qmldir (Join-Path $ScriptDir "src\qml") $targetExe
+    if ($LASTEXITCODE -ne 0) { throw "windeployqt failed with exit code $LASTEXITCODE" }
+
+    if (-not [string]::IsNullOrWhiteSpace($MsysPrefix)) {
+        Copy-Msys2DependencyClosure -TargetDir $stageDir -Prefix $MsysPrefix
+    }
+
+    if (Test-Path -LiteralPath $distDir) {
+        Remove-Item -LiteralPath $distDir -Recurse -Force
+    }
+    Copy-Item -LiteralPath $stageDir -Destination $distDir -Recurse
+
+    $versionMatch = Select-String -LiteralPath (Join-Path $ScriptDir "CMakeLists.txt") `
+        -Pattern "project\(ISPImageViewer VERSION ([0-9.]+)" | Select-Object -First 1
+    $version = if ($null -ne $versionMatch) { $versionMatch.Matches[0].Groups[1].Value } else { "unknown" }
+    $zipPath = Join-Path $ScriptDir "dist\ISPImageViewer-$version-windows-x64.zip"
+    if (-not $NoZip) {
+        if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
+        Compress-Archive -LiteralPath $distDir -DestinationPath $zipPath -CompressionLevel Optimal
+        $hash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        Write-Host "SHA-256: $hash"
+        Write-Host "Distributable ZIP: $zipPath"
+    }
+    Write-Host "Distributable directory: $distDir"
 }
 
 if ($Help) {
@@ -47,6 +169,9 @@ if (-not $IsWindows -and $PSVersionTable.PSEdition -eq "Core") {
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
 
+$Package = $Mode -eq "package"
+$BuildMode = if ($Mode -in @("dev", "debug")) { "debug" } else { "release" }
+
 if ($Toolchain -eq "msys2") {
     if ([string]::IsNullOrWhiteSpace($Msys2Ucrt64)) {
         $qmake = Get-Command qmake -ErrorAction SilentlyContinue
@@ -56,74 +181,73 @@ if ($Toolchain -eq "msys2") {
     }
     if ([string]::IsNullOrWhiteSpace($Msys2Ucrt64) -or
         -not (Test-Path -LiteralPath (Join-Path $Msys2Ucrt64 "bin\qmake.exe"))) {
-        throw "MSYS2 UCRT64 Qt was not found. Set MSYS2_UCRT64 to the UCRT64 prefix or put qmake on PATH."
+        throw "MSYS2 UCRT64 Qt was not found. Set MSYS2_UCRT64 or put qmake on PATH."
     }
 
     $Msys2Ucrt64 = (Resolve-Path -LiteralPath $Msys2Ucrt64).Path
-    $env:Path = "$(Join-Path $Msys2Ucrt64 'bin');$env:Path"
-    $BuildDir = Join-Path $ScriptDir "build\windows-msys2-$Mode"
-    if ($Clean) {
-        Write-Host "Removing $BuildDir"
-        Remove-Item -LiteralPath $BuildDir -Recurse -Force -ErrorAction SilentlyContinue
+    $qtBin = Join-Path $Msys2Ucrt64 "bin"
+    $env:Path = "$qtBin;$env:Path"
+    $BuildDir = Join-Path $ScriptDir "build\windows-msys2-$BuildMode"
+    if ($Clean -and (Test-Path -LiteralPath $BuildDir)) {
+        Write-Host "Removing build directory: $BuildDir"
+        Remove-Item -LiteralPath $BuildDir -Recurse -Force
     }
 
     $configureArgs = @(
-        "-S", $ScriptDir,
-        "-B", $BuildDir,
-        "-G", "Ninja",
-        "-DCMAKE_PREFIX_PATH=$Msys2Ucrt64",
-        "-DCMAKE_BUILD_TYPE=$Mode"
+        "-S", $ScriptDir, "-B", $BuildDir, "-G", "Ninja",
+        "-DCMAKE_PREFIX_PATH=$Msys2Ucrt64", "-DCMAKE_BUILD_TYPE=$BuildMode"
     )
-    if ($Mode -eq "debug") {
+    if ($BuildMode -eq "debug") {
         $configureArgs += "-DBUILD_TESTING=ON"
     } else {
-        $configureArgs += "-DBUILD_TESTING=OFF"
-        $configureArgs += "-DISPVIEW_BUILD_BENCHMARKS=ON"
+        $configureArgs += @("-DBUILD_TESTING=OFF", "-DISPVIEW_BUILD_BENCHMARKS=ON")
     }
 
-    Write-Host "Configuring MSYS2/UCRT64 Ninja build: $BuildDir"
+    Write-Host "Configuring MSYS2/UCRT64 build: $BuildDir"
     cmake @configureArgs
-    Write-Host "Building MSYS2/UCRT64 Ninja build (-j $Jobs)"
     cmake --build $BuildDir --parallel $Jobs
 
     if ($Test) {
-        if ($Mode -eq "debug") {
-            Write-Host "Running CTest: $BuildDir"
+        if ($BuildMode -eq "debug") {
             ctest --test-dir $BuildDir --output-on-failure
         } else {
-            Write-Host "Release build does not enable CTest; skipping -Test."
+            Write-Host "Release builds do not enable CTest; skipping -Test."
         }
     }
 
-    Write-Host "Executable: $BuildDir\ISPImageViewer.exe"
+    $executable = Find-ApplicationExecutable -Root $BuildDir
+    if ($Package) {
+        Publish-WindowsPackage -Executable $executable -QtBin $qtBin -MsysPrefix $Msys2Ucrt64
+    } else {
+        Write-Host "Development executable: $executable"
+        Write-Host "dist\ was not modified."
+    }
     exit 0
 }
 
-$Preset = "windows-$Mode"
-$BuildDir = Join-Path $ScriptDir "build\windows-$Mode"
-
-if ($Clean) {
-    Write-Host "Removing $BuildDir"
-    Remove-Item -LiteralPath $BuildDir -Recurse -Force -ErrorAction SilentlyContinue
+$Preset = "windows-$BuildMode"
+$BuildDir = Join-Path $ScriptDir "build\windows-$BuildMode"
+if ($Clean -and (Test-Path -LiteralPath $BuildDir)) {
+    Write-Host "Removing build directory: $BuildDir"
+    Remove-Item -LiteralPath $BuildDir -Recurse -Force
 }
 
-Write-Host "Configuring preset: $Preset"
 cmake --preset $Preset
-
-Write-Host "Building preset: $Preset (-j $Jobs)"
 cmake --build --preset $Preset --parallel $Jobs
-
 if ($Test) {
-    if ($Mode -eq "debug") {
-        Write-Host "Running tests: windows-debug"
+    if ($BuildMode -eq "debug") {
         ctest --preset windows-debug --output-on-failure
     } else {
-        Write-Host "Release preset does not define a CTest preset; skipping -Test for release."
+        Write-Host "Release builds do not enable CTest; skipping -Test."
     }
 }
 
-if ($Mode -eq "debug") {
-    Write-Host "Executable directory: $ScriptDir\build\windows-debug\src\Debug"
+$executable = Find-ApplicationExecutable -Root $BuildDir
+if ($Package) {
+    $deployCommand = Get-Command windeployqt.exe -ErrorAction SilentlyContinue
+    $qtBin = if ($null -ne $deployCommand) { Split-Path -Parent $deployCommand.Source } else { "" }
+    Publish-WindowsPackage -Executable $executable -QtBin $qtBin
 } else {
-    Write-Host "Executable directory: $ScriptDir\build\windows-release\src\Release"
+    Write-Host "Development executable: $executable"
+    Write-Host "dist\ was not modified."
 }
