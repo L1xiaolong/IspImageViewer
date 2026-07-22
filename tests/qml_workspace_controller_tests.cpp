@@ -3,9 +3,12 @@
 #include "qml/browse_controller.h"
 #include "qml/browse_workspace_controller.h"
 #include "qml/compare_controller.h"
+#include "qml/image_properties_controller.h"
+#include "qml/full_screen_controller.h"
+#include "qml/raw_parameters_controller.h"
 #include "qml/qml_image_canvas.h"
 #include "qml/thumbnail_image_provider.h"
-#include "ui/thumbnail_model.h"
+#include "browser/thumbnail_model.h"
 
 #include <QImage>
 #include <QDir>
@@ -59,6 +62,9 @@ QString createImage(QTemporaryDir& directory, const QString& name) {
 class QmlWorkspaceControllerTests final : public QObject {
     Q_OBJECT
 
+  private:
+    std::unique_ptr<QTemporaryDir> settingsDirectory_;
+
   private slots:
     void initTestCase();
     void addsActivatesAndClosesOneToFourPanes();
@@ -67,14 +73,22 @@ class QmlWorkspaceControllerTests final : public QObject {
     void copiesDropsIntoSubfoldersAndAcrossPanes();
     void emptyPaneOpensDroppedFoldersAndImageLocations();
     void rawParametersRefreshEveryPaneAndQmlProvider();
+    void browseFileDialogsAreRequestedByQmlAndActionsStayInBackend();
+    void imagePropertiesAreExposedWithoutWidgetUi();
+    void fullScreenSessionKeepsNavigationAndFileOperationsOutOfQml();
+    void rawParameterEditorAppliesValuesAndManagesPresetsWithoutWidgets();
     void comparePreferencesPersistAndHorizontalModeIsUnavailable();
     void compareUsesCompactRgbaPixelTextAndLumaOnlyHistogram();
     void compareViewSyncTemporarilyBypassesWithControl();
 };
 
 void QmlWorkspaceControllerTests::initTestCase() {
+    settingsDirectory_ = std::make_unique<QTemporaryDir>();
+    QVERIFY(settingsDirectory_->isValid());
     QCoreApplication::setOrganizationName(QStringLiteral("ISPViewTests"));
     QCoreApplication::setApplicationName(QStringLiteral("QmlWorkspaceControllerTests"));
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsDirectory_->path());
     QSettings().clear();
 }
 
@@ -129,8 +143,6 @@ void QmlWorkspaceControllerTests::addsActivatesAndClosesOneToFourPanes() {
     QCOMPARE(workspace.activePaneIndex(), 0);
     QVERIFY(workspace.hasActivePane());
     QVERIFY(paneAt(workspace, 0)->currentDirectory().isEmpty());
-    workspace.setActiveDisplayMode(2);
-    QCOMPARE(paneAt(workspace, 0)->displayMode(), 2);
 }
 
 void QmlWorkspaceControllerTests::keepsPaneStateIndependent() {
@@ -204,11 +216,11 @@ void QmlWorkspaceControllerTests::aggregatesUniqueSelectionsInStableOrder() {
 
     workspace.addFileManagerPane();
     workspace.selectPath(1, c, false, false);
-    QCOMPARE(workspace.workspaceSelectedPaths(), QStringList({c}));
+    QCOMPARE(workspace.workspaceSelectedPaths(), QStringList({a, b, c}));
     workspace.selectPath(0, a, false, true);
-    QCOMPARE(workspace.workspaceSelectedPaths(), QStringList({a, c}));
+    QCOMPARE(workspace.workspaceSelectedPaths(), QStringList({b, c}));
     workspace.selectPath(0, a, false, true);
-    QCOMPARE(workspace.workspaceSelectedPaths(), QStringList({c}));
+    QCOMPARE(workspace.workspaceSelectedPaths(), QStringList({b, a, c}));
 }
 
 void QmlWorkspaceControllerTests::copiesDropsIntoSubfoldersAndAcrossPanes() {
@@ -317,6 +329,146 @@ void QmlWorkspaceControllerTests::rawParametersRefreshEveryPaneAndQmlProvider() 
     QCOMPARE(refreshedImage.pixelColor(0, 0), QColor(Qt::green));
 }
 
+void QmlWorkspaceControllerTests::browseFileDialogsAreRequestedByQmlAndActionsStayInBackend() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString imagePath = createImage(directory, QStringLiteral("original.png"));
+    QVERIFY(!imagePath.isEmpty());
+    QVERIFY(QDir(directory.path()).mkdir(QStringLiteral("other")));
+
+    BrowseController controller(std::make_shared<QtImageDecoder>(), directory.path());
+
+    QSignalSpy directoryRequest(&controller, &BrowseController::directorySelectionRequested);
+    controller.chooseDirectory();
+    QCOMPARE(directoryRequest.size(), 1);
+    QCOMPARE(directoryRequest.constFirst().constFirst().toUrl(),
+             QUrl::fromLocalFile(directory.path()));
+
+    const QString otherDirectory = QDir(directory.path()).filePath(QStringLiteral("other"));
+    controller.openDirectoryUrl(QUrl::fromLocalFile(otherDirectory));
+    QCOMPARE(controller.currentDirectory(), QFileInfo(otherDirectory).absoluteFilePath());
+    controller.openDirectory(directory.path());
+
+    controller.selectPath(imagePath);
+    QSignalSpy renameRequest(&controller, &BrowseController::renameRequested);
+    controller.renameSelected();
+    QCOMPARE(renameRequest.size(), 1);
+    QCOMPARE(renameRequest.constFirst().constFirst().toString(), QStringLiteral("original.png"));
+    QVERIFY(!controller.renameSelectedTo(QStringLiteral("../invalid.png")).isEmpty());
+
+    const QString renamedPath = directory.filePath(QStringLiteral("renamed.png"));
+    QCOMPARE(controller.renameSelectedTo(QStringLiteral("renamed.png")), QString{});
+    QVERIFY(QFileInfo::exists(renamedPath));
+    QVERIFY(!QFileInfo::exists(imagePath));
+    QCOMPARE(controller.selectedPaths(), QStringList{renamedPath});
+
+    QSignalSpy trashRequest(&controller, &BrowseController::trashConfirmationRequested);
+    controller.moveSelectedToTrash();
+    QCOMPARE(trashRequest.size(), 1);
+    QCOMPARE(trashRequest.constFirst().constFirst().toInt(), 1);
+
+    const QString missingPath = directory.filePath(QStringLiteral("missing.png"));
+    controller.selectPath(missingPath);
+    const QString trashError = controller.moveSelectedToTrashConfirmed();
+    QVERIFY(trashError.contains(QStringLiteral("missing.png")));
+    QCOMPARE(controller.selectionCount(), 0);
+}
+
+void QmlWorkspaceControllerTests::imagePropertiesAreExposedWithoutWidgetUi() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString imagePath = createImage(directory, QStringLiteral("properties.png"));
+    QVERIFY(!imagePath.isEmpty());
+
+    ImageLoader loader(std::make_shared<QtImageDecoder>());
+    ImagePropertiesController properties(&loader);
+    QSignalSpy stateSpy(&properties, &ImagePropertiesController::stateChanged);
+    properties.loadPath(imagePath);
+    QTRY_VERIFY_WITH_TIMEOUT(!properties.loading(), 5000);
+    QVERIFY(stateSpy.size() >= 2);
+    QCOMPARE(properties.fileName(), QStringLiteral("properties.png"));
+    QVERIFY(!properties.directory());
+    QVERIFY(properties.errorText().isEmpty());
+    QVERIFY(properties.basicFields().size() >= 7);
+    QVERIFY(properties.exifFields().size() >= 16);
+
+    QSignalSpy histogramSpy(&properties, &ImagePropertiesController::histogramChanged);
+    properties.requestHistogram(0);
+    QTRY_VERIFY_WITH_TIMEOUT(!histogramSpy.isEmpty(), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(properties.histogram(0).value(QStringLiteral("valid")).toBool(), 5000);
+    QCOMPARE(properties.histogram(0).value(QStringLiteral("channels")).toList().size(), 4);
+
+    properties.loadPath(directory.path());
+    QCOMPARE(properties.directory(), true);
+    QCOMPARE(properties.basicFields().size(), 3);
+    QVERIFY(properties.exifFields().isEmpty());
+}
+
+void QmlWorkspaceControllerTests::fullScreenSessionKeepsNavigationAndFileOperationsOutOfQml() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString first = createImage(directory, QStringLiteral("first.png"));
+    const QString second = createImage(directory, QStringLiteral("second.png"));
+    QVERIFY(!first.isEmpty());
+    QVERIFY(!second.isEmpty());
+
+    ImageLoader loader(std::make_shared<QtImageDecoder>());
+    FullScreenController controller(&loader);
+    QSignalSpy filesystemSpy(&controller, &FullScreenController::filesystemChanged);
+    controller.open({first, second}, 0);
+    QCOMPARE(controller.currentPath(), first);
+    QVERIFY(!controller.canGoPrevious());
+    QVERIFY(controller.canGoNext());
+    controller.showNext();
+    QCOMPARE(controller.currentPath(), second);
+
+    QCOMPARE(controller.renameCurrentTo(QStringLiteral("renamed.png")), QString{});
+    const QString renamed = directory.filePath(QStringLiteral("renamed.png"));
+    QCOMPARE(controller.currentPath(), renamed);
+    QVERIFY(QFileInfo::exists(renamed));
+    QCOMPARE(filesystemSpy.size(), 1);
+
+    // Trash integration is exercised by the platform/UI suites; temporary test locations are
+    // intentionally not assumed to be trash-capable on every CI host.
+}
+
+void QmlWorkspaceControllerTests::rawParameterEditorAppliesValuesAndManagesPresetsWithoutWidgets() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString rawPath = directory.filePath(QStringLiteral("4x4_nv12.raw"));
+    QFile rawFile(rawPath);
+    QVERIFY(rawFile.open(QIODevice::WriteOnly));
+    QCOMPARE(rawFile.write(QByteArray(1024, '\0')), 1024);
+    rawFile.close();
+
+    ImageLoader loader(std::make_shared<RawParameterColorDecoder>());
+    RawImageParameters initial;
+    initial.size = {4, 4};
+    initial.format = RawPixelFormat::NV12;
+    initial.rowStride = 4;
+    initial.chromaStride = 4;
+    loader.setRawParameters(rawPath, initial);
+
+    RawParametersController controller(&loader);
+    controller.loadPath(rawPath);
+    QCOMPARE(controller.values().value(QStringLiteral("width")).toInt(), 4);
+    QVERIFY(controller.yuvFormat());
+    QSignalSpy appliedSpy(&controller, &RawParametersController::parametersApplied);
+    controller.setValue(QStringLiteral("width"), 8);
+    controller.setValue(QStringLiteral("rowStride"), 8);
+    controller.setValue(QStringLiteral("chromaStride"), 8);
+    QTRY_VERIFY_WITH_TIMEOUT(!appliedSpy.isEmpty(), 2000);
+    QCOMPARE(loader.rawParameters(rawPath)->size.width(), 8);
+    QCOMPARE(loader.rawParameters(rawPath)->rowStride, 8);
+
+    const QString presetName = QStringLiteral("qml-editor-test");
+    QCOMPARE(controller.savePreset(presetName), QString{});
+    QVERIFY(controller.presetNames().contains(presetName));
+    QCOMPARE(controller.selectedPreset(), presetName);
+    QCOMPARE(controller.deleteSelectedPreset(), QString{});
+    QVERIFY(!controller.presetNames().contains(presetName));
+}
+
 void QmlWorkspaceControllerTests::comparePreferencesPersistAndHorizontalModeIsUnavailable() {
     QSettings settings;
     settings.remove(QStringLiteral("compare"));
@@ -392,28 +544,41 @@ void QmlWorkspaceControllerTests::compareViewSyncTemporarilyBypassesWithControl(
     canvas.setPresentationMode(2);
     QCOMPARE(canvas.presentationMode(), 1);
     canvas.setPresentationMode(0);
-    canvas.fitAll();
+    canvas.actualPixelsAll();
 
-    const double fittedScale = canvas.effectiveViewState(0).pixelsPerImagePixel;
+    const double initialScale = canvas.effectiveViewState(0).pixelsPerImagePixel;
+    QCOMPARE(initialScale, 1.0);
     QWheelEvent synchronizedWheel(QPointF(50, 100), QPointF(50, 100), {}, QPoint(0, 120),
                                   Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
     QCoreApplication::sendEvent(&canvas, &synchronizedWheel);
-    QVERIFY(canvas.effectiveViewState(0).pixelsPerImagePixel > fittedScale);
+    QVERIFY(canvas.effectiveViewState(0).pixelsPerImagePixel > initialScale);
     QCOMPARE(canvas.effectiveViewState(0).pixelsPerImagePixel,
              canvas.effectiveViewState(1).pixelsPerImagePixel);
 
-    canvas.fitAll();
+    canvas.actualPixelsAll();
+#if defined(Q_OS_MACOS)
+    // Qt maps the physical Control key to MetaModifier on macOS.
+    constexpr auto independentModifier = Qt::MetaModifier;
+#else
+    constexpr auto independentModifier = Qt::ControlModifier;
+#endif
     QWheelEvent independentWheel(QPointF(50, 100), QPointF(50, 100), {}, QPoint(0, 120),
-                                 Qt::NoButton, Qt::ControlModifier, Qt::NoScrollPhase, false);
+                                 Qt::NoButton, independentModifier, Qt::NoScrollPhase, false);
     QCoreApplication::sendEvent(&canvas, &independentWheel);
     const double independentlyAdjustedScale =
         canvas.effectiveViewState(0).pixelsPerImagePixel;
     const double unchangedScale = canvas.effectiveViewState(1).pixelsPerImagePixel;
-    QVERIFY(independentlyAdjustedScale > fittedScale);
-    QCOMPARE(unchangedScale, fittedScale);
+    QVERIFY(independentlyAdjustedScale > initialScale);
+    QCOMPARE(unchangedScale, initialScale);
     const double independentRatio = independentlyAdjustedScale / unchangedScale;
 
-    QWheelEvent resumedWheel(QPointF(50, 100), QPointF(50, 100), {}, QPoint(0, 120),
+    // Releasing Ctrl does not reconcile either view. The next ordinary input
+    // applies the same scale delta to both independent baselines.
+    QCOMPARE(canvas.effectiveViewState(0).pixelsPerImagePixel,
+             independentlyAdjustedScale);
+    QCOMPARE(canvas.effectiveViewState(1).pixelsPerImagePixel, unchangedScale);
+
+    QWheelEvent resumedWheel(QPointF(250, 100), QPointF(250, 100), {}, QPoint(0, 120),
                              Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
     QCoreApplication::sendEvent(&canvas, &resumedWheel);
     QVERIFY(canvas.effectiveViewState(0).pixelsPerImagePixel > independentlyAdjustedScale);

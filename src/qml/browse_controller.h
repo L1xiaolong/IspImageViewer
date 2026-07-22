@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/image_types.h"
-#include "ui/thumbnail_filter_proxy_model.h"
+#include "browser/thumbnail_filter_proxy_model.h"
 
 #include <QFileSystemModel>
 #include <QModelIndex>
@@ -92,6 +92,7 @@ class BrowseController final : public QObject {
     void setSharedRecentFolders(const QStringList& paths);
 
     Q_INVOKABLE void openDirectory(const QString& path);
+    Q_INVOKABLE void openDirectoryUrl(const QUrl& url);
     Q_INVOKABLE void chooseDirectory();
     Q_INVOKABLE void navigateBack();
     Q_INVOKABLE void navigateForward();
@@ -113,7 +114,9 @@ class BrowseController final : public QObject {
     Q_INVOKABLE void copyDroppedUrlsInto(const QList<QUrl>& urls, const QString& directory);
     Q_INVOKABLE void openDroppedUrls(const QList<QUrl>& urls);
     Q_INVOKABLE void renameSelected();
+    Q_INVOKABLE QString renameSelectedTo(const QString& newName);
     Q_INVOKABLE void moveSelectedToTrash();
+    Q_INVOKABLE QString moveSelectedToTrashConfirmed();
     Q_INVOKABLE void revealSelected();
     Q_INVOKABLE void showSelectedProperties();
     Q_INVOKABLE void openSelected();
@@ -138,6 +141,12 @@ class BrowseController final : public QObject {
     void gridCellWidthChanged();
     void galleryImageChanged();
     void compareRequested(const QStringList& paths);
+    void fullScreenRequested(const QStringList& paths, int initialIndex);
+    void propertiesRequested(const QString& path);
+    void rawParametersRequested(const QString& path);
+    void directorySelectionRequested(const QUrl& initialFolder);
+    void renameRequested(const QString& currentName);
+    void trashConfirmationRequested(int itemCount);
 
   private:
     void openDirectoryInternal(const QString& path, bool addToHistory);
@@ -166,7 +175,6 @@ class BrowseController final : public QObject {
     int navigationHistoryIndex_ = -1;
     quint64 scanGeneration_ = 0;
     quint64 galleryRequestId_ = 0;
-    quint64 propertiesRequestId_ = 0;
     int gridCellWidth_ = 196;
     int displayMode_ = 0;
     QString galleryPath_;

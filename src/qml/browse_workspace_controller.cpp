@@ -46,7 +46,7 @@ bool BrowseWorkspaceController::canCompare() const {
 
 QString BrowseWorkspaceController::statusText() const {
     const BrowseController* active = activeBrowsePane();
-    if (!active) return QStringLiteral("No file manager · Add one to browse folders");
+    if (!active) return QStringLiteral("Choose a folder for this file manager");
     QString result = active->statusText();
     if (!selectedImagePaths_.isEmpty()) {
         int selectedPanes = 0;
@@ -142,11 +142,6 @@ void BrowseWorkspaceController::closePane(int index) {
 void BrowseWorkspaceController::selectPath(int paneIndex, const QString& path, bool extend,
                                            bool toggle) {
     if (paneIndex < 0 || paneIndex >= panes_.size() || path.isEmpty()) return;
-    if (!toggle) {
-        for (int index = 0; index < panes_.size(); ++index) {
-            if (index != paneIndex) panes_.at(index)->clearSelection();
-        }
-    }
     activatePane(paneIndex);
     panes_.at(paneIndex)->selectPath(path, extend, toggle);
 }
@@ -176,6 +171,10 @@ void BrowseWorkspaceController::normalizeDisplayModes() {
 void BrowseWorkspaceController::compareSelected() {
     if (!canCompare()) return;
     emit compareRequested(selectedImagePaths_);
+}
+
+void BrowseWorkspaceController::refreshAll() {
+    for (BrowseController* pane : panes_) pane->refresh();
 }
 
 void BrowseWorkspaceController::recomputeSelection() {

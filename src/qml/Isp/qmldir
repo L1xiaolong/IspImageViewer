@@ -1,9 +1,24 @@
 module Isp
 singleton Theme 1.0 Theme.qml
 AppIconButton 1.0 AppIconButton.qml
+AppConfirmDialog 1.0 AppConfirmDialog.qml
 AppMenu 1.0 AppMenu.qml
 AppMenuItem 1.0 AppMenuItem.qml
 AppMenuSeparator 1.0 AppMenuSeparator.qml
+AppTextInputDialog 1.0 AppTextInputDialog.qml
+BrowserPane 1.0 BrowserPane.qml
+CompareLumaHistogram 1.0 CompareLumaHistogram.qml
+DesignCompareCanvas 1.0 DesignCompareCanvas.qml
+DesignFullScreenCanvas 1.0 DesignFullScreenCanvas.qml
 FolderNavigator 1.0 FolderNavigator.qml
+FullScreenPropertiesCard 1.0 FullScreenPropertiesCard.qml
+ImagePropertiesDialog 1.0 ImagePropertiesDialog.qml
+PropertiesHistogram 1.0 PropertiesHistogram.qml
+PropertyFieldList 1.0 PropertyFieldList.qml
+RawNumberField 1.0 RawNumberField.qml
+RawParameterComboBox 1.0 RawParameterComboBox.qml
+RawParametersDialog 1.0 RawParametersDialog.qml
+ProductionCompareCanvas 1.0 ProductionCompareCanvas.qml
+ProductionFullScreenCanvas 1.0 ProductionFullScreenCanvas.qml
 TopToolbar 1.0 TopToolbar.ui.qml
 ThumbnailTile 1.0 ThumbnailTile.qml

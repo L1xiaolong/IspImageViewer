@@ -4,6 +4,7 @@
 #include "render/yuv_render_parameters.h"
 
 #include <QFile>
+#include <QCursor>
 #include <QHoverEvent>
 #include <QMatrix4x4>
 #include <QMouseEvent>
@@ -20,6 +21,17 @@
 
 namespace ispview {
 namespace {
+
+bool isIndependentViewAdjustment(Qt::KeyboardModifiers modifiers) {
+#if defined(Q_OS_MACOS)
+    // Qt exposes the physical Control key as MetaModifier on macOS, while
+    // ControlModifier represents Command. Accept both so the documented Ctrl
+    // gesture and the platform-equivalent modifier behave consistently.
+    return modifiers.testFlag(Qt::MetaModifier) || modifiers.testFlag(Qt::ControlModifier);
+#else
+    return modifiers.testFlag(Qt::ControlModifier);
+#endif
+}
 
 constexpr int kMaximumImages = 4;
 constexpr qreal kCellSpacing = 2.0;
@@ -635,7 +647,7 @@ class Renderer final : public QQuickRhiItemRenderer {
 QmlImageCanvas::QmlImageCanvas(QQuickItem* parent) : QQuickRhiItem(parent) {
     setMirrorVertically(false);
     setAlphaBlending(false);
-    setAcceptedMouseButtons(Qt::LeftButton);
+    setAcceptedMouseButtons(Qt::LeftButton | Qt::RightButton);
     setAcceptHoverEvents(true);
     connect(this, &QQuickItem::widthChanged, this, [this] {
         emit dividerPositionChanged();
@@ -869,7 +881,7 @@ void QmlImageCanvas::wheelEvent(QWheelEvent* event) {
     const double scale = state.pixelsPerImagePixel *
                          std::pow(1.2, event->angleDelta().y() / 120.0);
     const QPointF local = event->position() - cell.topLeft();
-    const bool controlHeld = event->modifiers().testFlag(Qt::ControlModifier);
+    const bool controlHeld = isIndependentViewAdjustment(event->modifiers());
     setViewState(slot,
                  ViewTransform::zoomAt(state, scale, local,
                                        QSize(qRound(cell.width()), qRound(cell.height())),
@@ -879,6 +891,11 @@ void QmlImageCanvas::wheelEvent(QWheelEvent* event) {
 }
 
 void QmlImageCanvas::mousePressEvent(QMouseEvent* event) {
+    if (event->button() == Qt::RightButton) {
+        emit contextMenuRequested(event->position());
+        event->accept();
+        return;
+    }
     activeSlot_ = slotAt(event->position());
     if (event->button() != Qt::LeftButton || activeSlot_ < 0 ||
         logicalImageSize(activeSlot_).isEmpty()) {
@@ -907,7 +924,7 @@ void QmlImageCanvas::mouseMoveEvent(QMouseEvent* event) {
     }
     if (dragging_ && activeSlot_ >= 0) {
         const ViewState state = effectiveViewState(activeSlot_);
-        const bool controlHeld = event->modifiers().testFlag(Qt::ControlModifier);
+        const bool controlHeld = isIndependentViewAdjustment(event->modifiers());
         setViewState(activeSlot_,
                      ViewTransform::panBy(state, event->position() - lastMousePosition_,
                                           logicalImageSize(activeSlot_)),

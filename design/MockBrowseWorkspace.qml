@@ -19,7 +19,7 @@ QtObject {
     readonly property string statusText: hasActivePane
         ? activePane.statusText + (workspaceSelectionCount > 0
           ? " · " + workspaceSelectionCount + " image(s) across " + selectedPaneCount() + " manager(s)" : "")
-        : "No file manager · Add one to browse folders"
+        : "Choose a folder for this file manager"
 
     signal compareRequested(var paths)
     function collectSelectedPaths() {
@@ -69,14 +69,18 @@ QtObject {
             return;
         if (paneCount === 1) {
             panes[0].currentDirectory = "";
-            panes[0].currentFolderName = "";
-            panes[0].clearSelection();
-            panes[0].statusText = "Choose a folder for this file manager";
-            activePaneIndex = 0;
-            return;
+            panes[0].currentFolderName = ""
+            panes[0].clearSelection()
+            panes[0].statusText = "Choose a folder for this file manager"
+            activePaneIndex = 0
+            return
         }
         const order = paneOrder.slice();
         const removed = order.splice(index, 1)[0];
+        removed.currentDirectory = "";
+        removed.currentFolderName = "";
+        removed.clearSelection();
+        removed.statusText = "Choose a folder for this file manager";
         order.push(removed);
         paneOrder = order;
         const closedActive = activePaneIndex === index;
@@ -91,12 +95,6 @@ QtObject {
     function selectPath(paneIndex, path, extend, toggle) {
         if (paneIndex < 0 || paneIndex >= paneCount)
             return;
-        if (!toggle) {
-            for (let index = 0; index < paneCount; ++index) {
-                if (index !== paneIndex)
-                    panes[index].clearSelection();
-            }
-        }
         activatePane(paneIndex);
         panes[paneIndex].selectPath(path, extend, toggle);
         refreshOrdinals();
@@ -115,13 +113,16 @@ QtObject {
     }
 
     function normalizeDisplayModes() {
+        const currentPanes = panes;
         if (paneCount >= 3) {
-            for (let index = 0; index < paneCount; ++index)
-                panes[index].setDisplayMode(1);
+            for (let index = 0; index < paneCount; ++index) {
+                if (currentPanes[index])
+                    currentPanes[index].setDisplayMode(1);
+            }
         } else if (paneCount === 2) {
             for (let index = 0; index < paneCount; ++index) {
-                if (panes[index].displayMode === 2)
-                    panes[index].setDisplayMode(0);
+                if (currentPanes[index] && currentPanes[index].displayMode === 2)
+                    currentPanes[index].setDisplayMode(0);
             }
         }
     }
@@ -157,8 +158,8 @@ QtObject {
 
     onPaneCountChanged: {
         if (paneCount < 1) {
-            paneCount = 1;
-            return;
+            paneCount = 1
+            return
         }
         normalizeDisplayModes();
         refreshOrdinals();

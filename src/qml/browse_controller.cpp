@@ -7,73 +7,25 @@
 #include "io/raw_preset_store.h"
 #include "io/single_file_rename.h"
 #include "platform/platform_services.h"
-#include "ui/file_clipboard.h"
-#include "ui/full_screen_window.h"
-#include "ui/image_properties_panel.h"
-#include "ui/raw_parameter_panel.h"
-#include "ui/thumbnail_model.h"
-#include "ui/trash_confirmation.h"
+#include "browser/file_clipboard.h"
+#include "browser/thumbnail_model.h"
 
-#include <QApplication>
 #include <QClipboard>
 #include <QDir>
-#include <QDialog>
-#include <QDialogButtonBox>
 #include <QFile>
-#include <QFileDialog>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
-#include <QFormLayout>
-#include <QInputDialog>
-#include <QLabel>
-#include <QLineEdit>
+#include <QGuiApplication>
 #include <QLocale>
-#include <QMessageBox>
 #include <QPointer>
 #include <QSettings>
 #include <QThreadPool>
 #include <QTimer>
-#include <QVBoxLayout>
 
 #include <algorithm>
 #include <utility>
 
 namespace ispview {
-namespace {
-
-void applyInspectorDialogStyle(QDialog* dialog) {
-    dialog->setStyleSheet(QStringLiteral(R"(
-        QDialog { background: #F7F9FA; color: #33414B; }
-        QLabel#dialogEyebrow { color: #73818A; font-size: 11px; font-weight: 600; }
-        QLabel#dialogHeading { color: #26343D; font-size: 18px; font-weight: 600; }
-        QTabWidget::pane { background: #FCFDFC; border: 1px solid #D7DEE3; border-radius: 8px; top: -1px; }
-        QTabBar::tab { background: transparent; color: #71808A; padding: 8px 12px; margin-right: 3px; }
-        QTabBar::tab:selected { color: #2E5269; border-bottom: 2px solid #6C8799; }
-        QTreeWidget, QTableWidget, QComboBox, QSpinBox, QDoubleSpinBox {
-            background: #FCFDFC; border: 1px solid #D7DEE3; border-radius: 6px; color: #33414B;
-            selection-background-color: #E8F0F4; selection-color: #26343D; min-height: 26px;
-        }
-        QTreeWidget::item { padding: 4px 6px; }
-        QHeaderView::section { background: #F1F4F5; color: #71808A; border: none; border-bottom: 1px solid #D7DEE3; padding: 6px; font-weight: 600; }
-        QGroupBox { background: #FCFDFC; border: 1px solid #D7DEE3; border-radius: 8px; margin-top: 10px; padding: 12px 8px 8px 8px; font-weight: 600; }
-        QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; color: #52636D; }
-        QPushButton { background: #FCFDFC; border: 1px solid #C9D4DA; border-radius: 6px; padding: 6px 10px; color: #33414B; min-height: 24px; }
-        QPushButton:hover { background: #EAF0F4; border-color: #9EB2BE; }
-        QPushButton:pressed { background: #DFE8EC; }
-        QPushButton:disabled { color: #A9B2B8; border-color: #E1E6E9; }
-        QCheckBox { color: #45555F; spacing: 7px; }
-        QScrollArea { background: transparent; border: none; }
-    )"));
-}
-
-QLabel* dialogLabel(const QString& text, const QString& objectName, QWidget* parent) {
-    auto* label = new QLabel(text, parent);
-    label->setObjectName(objectName);
-    return label;
-}
-
-} // namespace
-
 BrowseController::BrowseController(std::shared_ptr<const IImageDecoder> decoder,
                                    const QString& initialDirectory, QObject* parent)
     : QObject(parent), loader_(new ImageLoader(std::move(decoder), this)),
@@ -184,8 +136,14 @@ void BrowseController::initialize(const QString& initialDirectory, bool startEmp
         QSettings().setValue(QStringLiteral("browser/recentFolders"), recentFolders_);
         emit recentFoldersChanged();
     });
-    connect(QApplication::clipboard(), &QClipboard::dataChanged, this,
+    connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, this,
             &BrowseController::clipboardStateChanged);
+    connect(loader_, &ImageLoader::rawParametersChanged, this, [this](const QString& path) {
+        if (galleryPath_ != path) return;
+        galleryPath_.clear();
+        galleryFrame_.reset();
+        setGalleryPath(path);
+    });
 
     if (startEmpty) {
         statusText_ = QStringLiteral("Choose a folder for this file manager");
@@ -275,13 +233,13 @@ bool BrowseController::canEditRaw() const {
 
 void BrowseController::openDirectory(const QString& path) { openDirectoryInternal(path, true); }
 
+void BrowseController::openDirectoryUrl(const QUrl& url) {
+    if (url.isLocalFile()) openDirectoryInternal(url.toLocalFile(), true);
+}
+
 void BrowseController::chooseDirectory() {
     const QString start = currentDirectory_.isEmpty() ? QDir::homePath() : currentDirectory_;
-    const QString path = QFileDialog::getExistingDirectory(
-        QApplication::activeWindow(), QStringLiteral("Open Folder"), start);
-    if (!path.isEmpty()) {
-        openDirectoryInternal(path, true);
-    }
+    emit directorySelectionRequested(QUrl::fromLocalFile(start));
 }
 
 void BrowseController::navigateBack() {
@@ -521,46 +479,55 @@ void BrowseController::openDroppedUrls(const QList<QUrl>& urls) {
 }
 
 void BrowseController::renameSelected() {
-    if (selectedPaths_.size() != 1) {
-        return;
-    }
+    if (selectedPaths_.size() != 1) return;
+    emit renameRequested(QFileInfo(selectedPaths_.first()).fileName());
+}
+
+QString BrowseController::renameSelectedTo(const QString& requestedName) {
+    if (selectedPaths_.size() != 1) return QStringLiteral("Select one item to rename.");
     const QFileInfo source(selectedPaths_.first());
-    bool accepted = false;
-    const QString newName =
-        QInputDialog::getText(QApplication::activeWindow(), QStringLiteral("Rename Item"),
-                              QStringLiteral("New name:"), QLineEdit::Normal, source.fileName(),
-                              &accepted)
-            .trimmed();
-    if (!accepted || newName.isEmpty() || newName == source.fileName()) {
-        return;
+    const QString newName = requestedName.trimmed();
+    if (newName.isEmpty()) return QStringLiteral("Enter a name.");
+    if (newName.contains(QLatin1Char('/')) || newName.contains(QLatin1Char('\\')) ||
+        newName == QStringLiteral(".") || newName == QStringLiteral("..")) {
+        return QStringLiteral("The name contains unsupported characters.");
     }
+    if (newName == source.fileName()) return {};
     const QString destination = source.dir().filePath(newName);
     QString error;
-    if (!SingleFileRename::execute(source.absoluteFilePath(), destination, &error)) {
-        QMessageBox::warning(QApplication::activeWindow(), QStringLiteral("Rename Failed"), error);
-        return;
-    }
+    if (!SingleFileRename::execute(source.absoluteFilePath(), destination, &error)) return error;
     updateSelection({destination});
     rescanCurrentDirectory();
+    setStatusText(QStringLiteral("Renamed to %1").arg(newName));
+    return {};
 }
 
 void BrowseController::moveSelectedToTrash() {
-    if (selectedPaths_.isEmpty() ||
-        !TrashConfirmation::request(QApplication::activeWindow(), selectedPaths_.size())) {
-        return;
-    }
+    if (!selectedPaths_.isEmpty())
+        emit trashConfirmationRequested(static_cast<int>(selectedPaths_.size()));
+}
+
+QString BrowseController::moveSelectedToTrashConfirmed() {
+    if (selectedPaths_.isEmpty()) return {};
+    const int requestedCount = static_cast<int>(selectedPaths_.size());
     QStringList failures;
     for (const QString& path : std::as_const(selectedPaths_)) {
         if (!QFile::moveToTrash(path)) {
             failures.append(QFileInfo(path).fileName());
         }
     }
-    if (!failures.isEmpty()) {
-        QMessageBox::warning(QApplication::activeWindow(), QStringLiteral("Trash Incomplete"),
-                             failures.join(QLatin1Char('\n')));
-    }
     clearSelection();
     rescanCurrentDirectory();
+    if (!failures.isEmpty()) {
+        const QString message = QStringLiteral("Could not move to Trash:\n%1")
+                                    .arg(failures.join(QLatin1Char('\n')));
+        setStatusText(QStringLiteral("%1 of %2 item(s) could not be moved to Trash")
+                          .arg(failures.size())
+                          .arg(requestedCount));
+        return message;
+    }
+    setStatusText(QStringLiteral("Moved %1 item(s) to Trash").arg(requestedCount));
+    return {};
 }
 
 void BrowseController::revealSelected() {
@@ -571,75 +538,7 @@ void BrowseController::revealSelected() {
 }
 
 void BrowseController::showSelectedProperties() {
-    if (selectedPaths_.size() != 1) {
-        return;
-    }
-    const QString path = selectedPaths_.first();
-    const QFileInfo info(path);
-    if (info.isDir()) {
-        auto* dialog = new QDialog(QApplication::activeWindow());
-        dialog->setAttribute(Qt::WA_DeleteOnClose);
-        dialog->setWindowTitle(QStringLiteral("Properties — %1").arg(info.fileName()));
-        dialog->resize(480, 300);
-        applyInspectorDialogStyle(dialog);
-        auto* layout = new QVBoxLayout(dialog);
-        layout->setContentsMargins(20, 18, 20, 14);
-        layout->setSpacing(10);
-        layout->addWidget(dialogLabel(QStringLiteral("FOLDER"), QStringLiteral("dialogEyebrow"), dialog));
-        layout->addWidget(dialogLabel(info.fileName(), QStringLiteral("dialogHeading"), dialog));
-        auto* fields = new QFormLayout;
-        fields->setHorizontalSpacing(18);
-        fields->setVerticalSpacing(10);
-        fields->addRow(QStringLiteral("Type"), new QLabel(QStringLiteral("Folder"), dialog));
-        fields->addRow(QStringLiteral("Location"),
-                       new QLabel(QDir::toNativeSeparators(info.absolutePath()), dialog));
-        fields->addRow(QStringLiteral("Modified"),
-                       new QLabel(QLocale().toString(info.lastModified(), QLocale::LongFormat), dialog));
-        layout->addLayout(fields);
-        layout->addStretch(1);
-        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, dialog);
-        connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::close);
-        layout->addWidget(buttons);
-        dialog->show();
-        return;
-    }
-
-    auto* dialog = new QDialog(QApplication::activeWindow());
-    dialog->setAttribute(Qt::WA_DeleteOnClose);
-    dialog->setWindowTitle(QStringLiteral("Properties — %1").arg(info.fileName()));
-    dialog->resize(600, 780);
-    applyInspectorDialogStyle(dialog);
-    auto* layout = new QVBoxLayout(dialog);
-    layout->setContentsMargins(16, 14, 16, 12);
-    layout->setSpacing(10);
-    layout->addWidget(dialogLabel(QStringLiteral("IMAGE INSPECTION"), QStringLiteral("dialogEyebrow"), dialog));
-    layout->addWidget(dialogLabel(info.fileName(), QStringLiteral("dialogHeading"), dialog));
-    auto* panel = new ImagePropertiesPanel(dialog);
-    if (const auto raw = loader_->rawParameters(path)) {
-        panel->setRawParameters(path, *raw);
-    }
-    layout->addWidget(panel, 1);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, dialog);
-    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::close);
-    layout->addWidget(buttons);
-    dialog->show();
-
-    const quint64 requestId = ++propertiesRequestId_;
-    const QPointer<QDialog> guardedDialog(dialog);
-    const QPointer<ImagePropertiesPanel> guardedPanel(panel);
-    loader_->request(
-        requestId, {path, DecodePurpose::Full, {}},
-        [guardedDialog, guardedPanel](quint64, const DecodeResult& result) {
-            if (!guardedDialog || !guardedPanel) {
-                return;
-            }
-            if (!result.frame) {
-                QMessageBox::warning(guardedDialog, QStringLiteral("Properties"), result.error);
-                return;
-            }
-            guardedPanel->setFrame(result.frame);
-        },
-        1);
+    if (selectedPaths_.size() == 1) emit propertiesRequested(selectedPaths_.first());
 }
 
 void BrowseController::openSelected() {
@@ -649,9 +548,7 @@ void BrowseController::openSelected() {
     }
     const QStringList paths = allImagePaths();
     const int index = std::max(0, static_cast<int>(paths.indexOf(selectedImages.first())));
-    auto* window = new FullScreenWindow(loader_, paths, index);
-    window->setAttribute(Qt::WA_DeleteOnClose);
-    window->showMaximized();
+    emit fullScreenRequested(paths, index);
 }
 
 void BrowseController::compareSelected() {
@@ -664,74 +561,7 @@ void BrowseController::compareSelected() {
 }
 
 void BrowseController::editSelectedRawParameters() {
-    if (!canEditRaw()) {
-        return;
-    }
-    const QString path = selectedPaths_.first();
-    std::optional<RawImageParameters> parameters = loader_->rawParameters(path);
-    if (!parameters) {
-        parameters = RawPresetStore::loadForFile(path);
-    }
-    if (!parameters) {
-        parameters = RawPresetStore::inferFromFileName(path);
-    }
-
-    auto* dialog = new QDialog(QApplication::activeWindow());
-    dialog->setAttribute(Qt::WA_DeleteOnClose);
-    dialog->setWindowTitle(QStringLiteral("RAW/YUV Configuration — %1")
-                               .arg(QFileInfo(path).fileName()));
-    dialog->resize(500, 800);
-    applyInspectorDialogStyle(dialog);
-    auto* layout = new QVBoxLayout(dialog);
-    layout->setContentsMargins(16, 14, 16, 12);
-    layout->setSpacing(10);
-    layout->addWidget(dialogLabel(QStringLiteral("RAW / YUV DECODER"), QStringLiteral("dialogEyebrow"), dialog));
-    layout->addWidget(dialogLabel(QFileInfo(path).fileName(), QStringLiteral("dialogHeading"), dialog));
-    auto* panel = new RawParameterPanel(dialog);
-    panel->setSource(path, *parameters);
-    layout->addWidget(panel, 1);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, dialog);
-    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::close);
-    layout->addWidget(buttons);
-
-    connect(panel, &RawParameterPanel::parametersChanged, dialog,
-            [this](const QString& changedPath, RawImageParameters changed) {
-                changed.frameIndex = 0;
-                if (availableFrameCount(QFileInfo(changedPath).size(), changed) <= 0) {
-                    setStatusText(
-                        QStringLiteral("RAW/YUV parameters do not describe one complete frame"));
-                    return;
-                }
-                loader_->setRawParameters(changedPath, changed);
-                thumbnailModel_->invalidateThumbnail(changedPath);
-                if (galleryPath_ == changedPath) {
-                    galleryPath_.clear();
-                    setGalleryPath(changedPath);
-                }
-            });
-    connect(panel, &RawParameterPanel::folderParametersApplied, dialog,
-            [this](const QString& sourcePath, RawImageParameters changed) {
-                changed.frameIndex = 0;
-                const QFileInfo source(sourcePath);
-                for (const QString& candidatePath : allImagePaths()) {
-                    const QFileInfo candidate(candidatePath);
-                    if (candidate.absolutePath() == source.absolutePath() &&
-                        candidate.suffix().compare(source.suffix(), Qt::CaseInsensitive) == 0) {
-                        loader_->setRawParameters(candidatePath, changed);
-                        thumbnailModel_->invalidateThumbnail(candidatePath);
-                    }
-                }
-                rescanCurrentDirectory();
-            });
-    connect(panel, &RawParameterPanel::notificationRequested, dialog,
-            [this, dialog](const QString& message, bool error) {
-                if (error) {
-                    QMessageBox::warning(dialog, QStringLiteral("RAW/YUV Configuration"), message);
-                } else {
-                    setStatusText(message);
-                }
-            });
-    dialog->show();
+    if (canEditRaw()) emit rawParametersRequested(selectedPaths_.first());
 }
 
 void BrowseController::setGalleryPath(const QString& path) {

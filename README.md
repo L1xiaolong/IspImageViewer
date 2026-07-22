@@ -25,10 +25,11 @@ existing RAW/YUV code is retained but is not the active product-expansion direct
 - Full-screen browsing and synchronized 2–4 image comparison
 - FastStone-style four-edge full-screen overlays, plus a context menu for file-manager reveal and
   pinned in-canvas EXIF or histogram inspection
-- Immersive comparison window with a single top toolbar, per-pane file/EXIF/histogram/pixel
-  overlays, vertical/horizontal split for two images, and press-and-hold B-over-A inspection
-- Independent 2×2 multi-folder workspace; select 2–4 images within or across panes and launch the
-  normal comparison view
+- Immersive QML comparison page with a compact top toolbar, per-pane file/EXIF/luma-histogram/pixel
+  overlays, vertical split for two images, relative synchronized views, and press-and-hold B-over-A
+  inspection
+- Embedded 1–4 file-manager workspace; select 2–4 images within or across directories and launch
+  the normal comparison page without creating extra windows
 - Byte-bounded memory caching and persistent thumbnail caching
 - Incremental directory monitoring with a folder-first thumbnail grid, always-visible filenames,
   and selectable natural-name/date/size/type sorting
@@ -71,7 +72,7 @@ ISPImageViewer /path/to/images
 
 - CMake 3.25+
 - C++20 compiler
-- Qt 6.7+ with Widgets, ShaderTools, and private Gui headers
+- Qt 6.7+ with Quick, Quick Controls 2, ShaderTools, and private Gui headers
 - Optional LibRaw 0.21+ for DNG and camera RAW support
 - Optional Exiv2 0.28+ for JPEG/PNG EXIF, IPTC, and XMP metadata
 - Optional LittleCMS 2.x for embedded RGB ICC conversion
@@ -121,26 +122,16 @@ ctest --preset macos-debug
 
 The application bundle is generated under `build/macos-preset-debug/src`.
 
-Repeatable CPU decode and native GPU upload benchmarks are built by the Release presets:
+Repeatable CPU decode, histogram, and color-management benchmarks are built by the Release presets:
 
 ```sh
 cmake --build --preset macos-release
 ./build/macos-preset-release/tools/ispview_raw_benchmark --48mp
 ./build/macos-preset-release/tools/ispview_histogram_benchmark --48mp
 ./build/macos-preset-release/tools/ispview_color_benchmark --48mp
-./build/macos-preset-release/tools/ispview_gpu_benchmark --48mp
-./build/macos-preset-release/tools/ispview_gpu_benchmark --bayer --48mp
-./build/macos-preset-release/tools/ispview_gpu_benchmark --pipeline --48mp
-./build/macos-preset-release/tools/ispview_ui_benchmark --48mp
-./build/macos-preset-release/tools/ispview_ui_benchmark --encoded-directory test_images
-./build/macos-preset-release/tools/ispview_ui_benchmark --raw-directory test_images \
-  --candidate-raw16 6236x4178:14:RGGB --orientation 180
 ./build/macos-preset-release/tools/ispview_sample_check --allow-incomplete test_images
-./build/macos-preset-release/tools/ispview_gpu_benchmark --sample-directory test_images
 ./build/macos-preset-release/tools/ispview_sample_check --allow-incomplete \
   --candidate-raw16 6236x4178:14:RGGB --orientation 180 test_images
-./build/macos-preset-release/tools/ispview_gpu_benchmark --sample-directory test_images \
-  --candidate-raw16 6236x4178:14:RGGB --orientation 180
 ```
 
 The GPU benchmark requires a native display session and fails if RAW/YUV rendering falls back to CPU RGBA.
@@ -168,12 +159,12 @@ The supported local validation path is MSYS2/UCRT64 GCC + Ninja:
 
 ```pwsh
 $env:MSYS2_UCRT64 = (& qmake -query QT_INSTALL_PREFIX).Trim()
-.\build_windows.ps1 -Toolchain msys2 -Mode debug -Test -Rhi
+.\build_windows.ps1 -Toolchain msys2 -Mode debug -Test
 .\build_windows.ps1 -Toolchain msys2 -Mode release
 ```
 
 The wrapper configures and builds a Ninja tree under `build/windows-msys2-debug` or
-`build/windows-msys2-release`. Use `.\build_windows.ps1 -Help` for `-Clean`, `-Rhi`, `-Jobs N`,
+`build/windows-msys2-release`. Use `.\build_windows.ps1 -Help` for `-Clean`, `-Jobs N`,
 `-Msys2Ucrt64`, and the legacy `-Toolchain msvc` option.
 
 Equivalent raw CMake commands:
@@ -182,13 +173,12 @@ Equivalent raw CMake commands:
 cmake --preset windows-msys2-debug
 cmake --build --preset windows-msys2-debug
 ctest --preset windows-msys2-debug --output-on-failure
-ctest --preset windows-msys2-rhi-acceptance --output-on-failure
 ```
 
 The single-configuration Ninja build writes the application to
 `build/windows-msys2-debug/ISPImageViewer.exe`. The Release preset enables benchmark tools.
 
-For MSYS2 package installation, native UI/RHI test policy, optional LibRaw/Exiv2 validation, and
+For MSYS2 package installation, QML test policy, optional LibRaw/Exiv2 validation, and
 the latest Windows evidence, see [docs/windows-msys2-validation.md](docs/windows-msys2-validation.md).
 
 The legacy Visual Studio presets remain available when explicitly requested:

@@ -1,3 +1,5 @@
 module Pages
 
 BrowsePage 1.0 BrowsePage.qml
+ComparePage 1.0 ComparePage.qml
+FullScreenPage 1.0 FullScreenPage.qml

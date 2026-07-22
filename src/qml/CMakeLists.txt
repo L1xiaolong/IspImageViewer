@@ -13,6 +13,12 @@ qt_add_executable(ISPImageViewerQml
     qml_image_canvas.cpp
     compare_controller.h
     compare_controller.cpp
+    image_properties_controller.h
+    image_properties_controller.cpp
+    full_screen_controller.h
+    full_screen_controller.cpp
+    raw_parameters_controller.h
+    raw_parameters_controller.cpp
 )
 
 qt_add_qml_module(ISPImageViewerQml
@@ -22,16 +28,30 @@ qt_add_qml_module(ISPImageViewerQml
         Main.qml
         Isp/Theme.qml
         Isp/AppIconButton.qml
+        Isp/AppTextInputDialog.qml
+        Isp/AppConfirmDialog.qml
         Isp/AppMenu.qml
         Isp/AppMenuItem.qml
         Isp/AppMenuSeparator.qml
         Isp/BrowserPane.qml
         Isp/CompareLumaHistogram.qml
+        Isp/DesignCompareCanvas.qml
+        Isp/DesignFullScreenCanvas.qml
         Isp/FolderNavigator.qml
+        Isp/FullScreenPropertiesCard.qml
+        Isp/ImagePropertiesDialog.qml
+        Isp/PropertiesHistogram.qml
+        Isp/PropertyFieldList.qml
+        Isp/RawNumberField.qml
+        Isp/RawParameterComboBox.qml
+        Isp/RawParametersDialog.qml
+        Isp/ProductionCompareCanvas.qml
+        Isp/ProductionFullScreenCanvas.qml
         Isp/TopToolbar.ui.qml
         Isp/ThumbnailTile.qml
         Pages/BrowsePage.qml
         Pages/ComparePage.qml
+        Pages/FullScreenPage.qml
 )
 
 set(_ispview_qml_icons
@@ -78,7 +98,8 @@ qt_add_resources(ISPImageViewerQml "ispview_qml_icons"
 
 target_include_directories(ISPImageViewerQml PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(ISPImageViewerQml PRIVATE
-    ispview_ui
+    ispview_browser_backend
+    ispview_render_backend
     ispview_io
     Qt6::Quick
     Qt6::QuickControls2
@@ -88,8 +109,7 @@ target_link_libraries(ISPImageViewerQml PRIVATE
 )
 ispview_enable_warnings(ISPImageViewerQml)
 
-# This is the production application. The Widgets executable is retained above only as an
-# internal compatibility target and never shares this artifact identity.
+# The QML executable is the sole production application artifact.
 set_target_properties(ISPImageViewerQml PROPERTIES
     WIN32_EXECUTABLE ON
     MACOSX_BUNDLE ON

@@ -3,6 +3,14 @@ import QtQuick
 QtObject {
     id: root
 
+    signal directorySelectionRequested(url initialFolder)
+    signal renameRequested(string currentName)
+    signal trashConfirmationRequested(int itemCount)
+    signal propertiesRequested(string path)
+    signal fullScreenRequested(var paths, int initialIndex)
+    signal rawParametersRequested(string path)
+    signal galleryImageChanged()
+
     property int gridCellWidth: 196
     property string filterText: ""
     property int sortMode: 0
@@ -188,7 +196,10 @@ QtObject {
         currentFolderName = path.split("/").pop();
     }
     function chooseDirectory() {
-        statusText = "Folder chooser preview";
+        directorySelectionRequested("file:///Images/ISP%20calibration");
+    }
+    function openDirectoryUrl(url) {
+        openDirectory(decodeURIComponent(String(url).replace("file://", "")));
     }
     function navigateBack() {
         statusText = "Back";
@@ -223,6 +234,12 @@ QtObject {
     }
     function activatePath(path) {
         statusText = "Open " + path.split("/").pop();
+        let allPaths = []
+        for (let index = 0; index < thumbnails.count; ++index) {
+            if (!thumbnails.get(index).isDirectory)
+                allPaths.push(thumbnails.get(index).path)
+        }
+        fullScreenRequested(allPaths, Math.max(0, allPaths.indexOf(path)))
     }
     function copySelected(cut) {
         statusText = cut ? "Cut selection" : "Copied selection";
@@ -243,22 +260,40 @@ QtObject {
         statusText = urls.length + " dropped item(s) opened";
     }
     function renameSelected() {
-        statusText = "Rename preview";
+        if (selectionCount === 1)
+            renameRequested(selectedPaths[0].split(/[\\/]/).pop());
+    }
+    function renameSelectedTo(name) {
+        if (name.trim().length === 0)
+            return "Enter a name.";
+        statusText = "Renamed selection to “" + name.trim() + "”";
+        return "";
     }
     function moveSelectedToTrash() {
-        statusText = "Move to Trash preview";
+        if (selectionCount > 0)
+            trashConfirmationRequested(selectionCount);
+    }
+    function moveSelectedToTrashConfirmed() {
+        statusText = "Moved " + selectionCount + " item(s) to Trash";
+        clearSelection();
+        return "";
     }
     function revealSelected() {
         statusText = "Reveal in Finder preview";
     }
     function showSelectedProperties() {
         statusText = "Show selected properties";
+        if (selectionCount === 1)
+            propertiesRequested(selectedPaths[0]);
     }
     function editSelectedRawParameters() {
         statusText = "Edit RAW/YUV parameters";
+        if (selectionCount === 1)
+            rawParametersRequested(selectedPaths[0]);
     }
     function setGalleryPath(path) {
         galleryImageReady = true;
+        galleryImageChanged();
     }
     function probeGalleryPixel(x, y) {
         return "x " + x + " · y " + y + " · RGBA(32, 64, 96, 255)";

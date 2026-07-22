@@ -61,7 +61,6 @@ class CompareController final : public QObject {
     Q_INVOKABLE void fitAll();
     Q_INVOKABLE void actualPixelsAll();
     Q_INVOKABLE QVariantList pixelTexts(int sourceSlot, int x, int y) const;
-    Q_INVOKABLE QString chooseScreenshotPath();
     Q_INVOKABLE void requestHistogram(int slot);
     Q_INVOKABLE QVariantMap histogram(int slot) const;
 

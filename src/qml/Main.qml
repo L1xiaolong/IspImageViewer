@@ -14,6 +14,51 @@ ApplicationWindow {
     title: "ISP Image Viewer"
     color: Theme.sensorWhite
     property bool showingCompare: false
+    property bool showingFullScreen: false
+    property bool forceApplicationClose: false
+    property int previousVisibility: Window.Windowed
+
+    function openFullScreen(paths, initialIndex) {
+        previousVisibility = visibility
+        showingCompare = false
+        showingFullScreen = true
+        fullScreenPage.open(paths, initialIndex)
+        showFullScreen()
+    }
+
+    function closeCompare() {
+        if (!showingCompare)
+            return
+        compareController.setHoldCandidate(false)
+        showingCompare = false
+        Qt.callLater(function() { browsePage.forceActiveFocus() })
+    }
+
+    function closeFullScreen() {
+        if (!showingFullScreen)
+            return
+        showingFullScreen = false
+        if (previousVisibility === Window.Maximized)
+            showMaximized()
+        else if (previousVisibility === Window.FullScreen)
+            showFullScreen()
+        else
+            showNormal()
+        browseController.refreshAll()
+        Qt.callLater(function() { browsePage.forceActiveFocus() })
+    }
+
+    onClosing: function(close) {
+        if (forceApplicationClose) {
+            close.accepted = true
+        } else if (showingFullScreen) {
+            close.accepted = false
+            closeFullScreen()
+        } else if (showingCompare) {
+            close.accepted = false
+            closeCompare()
+        }
+    }
 
     Component.onCompleted: {
         if (initialComparePaths.length >= 2) {
@@ -34,14 +79,31 @@ ApplicationWindow {
         anchors.fill: parent
         controller: browseController.activePane
         workspaceController: browseController
-        visible: !window.showingCompare
+        propertiesController: imagePropertiesController
+        rawController: rawParametersController
+        visible: !window.showingCompare && !window.showingFullScreen
+        onFullScreenRequested: function(paths, initialIndex) {
+            window.openFullScreen(paths, initialIndex)
+        }
     }
     ComparePage {
         id: comparePage
         objectName: "comparePage"
         controller: compareController
         anchors.fill: parent
-        visible: window.showingCompare
-        onCloseRequested: window.showingCompare = false
+        visible: window.showingCompare && !window.showingFullScreen
+        onCloseRequested: window.closeCompare()
+    }
+    FullScreenPage {
+        id: fullScreenPage
+        controller: fullScreenController
+        propertiesController: imagePropertiesController
+        anchors.fill: parent
+        visible: window.showingFullScreen
+        onCloseRequested: window.closeFullScreen()
+    }
+    Connections {
+        target: fullScreenController
+        function onFilesystemChanged() { browseController.refreshAll() }
     }
 }

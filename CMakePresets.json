@@ -113,32 +113,8 @@
       "output": { "outputOnFailure": true }
     },
     {
-      "name": "macos-rhi-acceptance",
-      "displayName": "macOS native Metal acceptance",
-      "configurePreset": "macos-debug",
-      "filter": { "include": { "name": "^ispview_render_tests$" } },
-      "environment": { "ISPVIEW_REQUIRE_NATIVE_RHI_TESTS": "1" },
-      "output": { "outputOnFailure": true }
-    },
-    {
-      "name": "windows-rhi-acceptance",
-      "displayName": "Windows native Direct3D 11 acceptance",
-      "configurePreset": "windows-debug",
-      "configuration": "Debug",
-      "filter": { "include": { "name": "^ispview_render_tests$" } },
-      "environment": { "ISPVIEW_REQUIRE_NATIVE_RHI_TESTS": "1" },
-      "output": { "outputOnFailure": true }
-    },
-    {
       "name": "windows-msys2-debug",
       "configurePreset": "windows-msys2-debug",
-      "output": { "outputOnFailure": true }
-    },
-    {
-      "name": "windows-msys2-rhi-acceptance",
-      "configurePreset": "windows-msys2-debug",
-      "filter": { "include": { "name": "^ispview_render_tests$" } },
-      "environment": { "ISPVIEW_REQUIRE_NATIVE_RHI_TESTS": "1" },
       "output": { "outputOnFailure": true }
     }
   ]

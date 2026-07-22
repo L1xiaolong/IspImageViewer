@@ -44,7 +44,7 @@ TestCase {
         compare(mockController.selectedPaths.length, 1);
         compare(mockController.selectedPaths[0], mockController.thumbnails.get(2).path);
 
-        const imageMenu = findChild(browsePage, "galleryImageContextMenu");
+        const imageMenu = findChild(browsePage, "galleryFileContextMenu");
         verify(imageMenu !== null);
         mouseClick(thumbnailMouse, thumbnailMouse.width / 2, thumbnailMouse.height / 2,
                    Qt.RightButton);
@@ -65,7 +65,7 @@ TestCase {
 
     function test_previewInformationAndDragMimeMatchProductionContract() {
         const infoText = findChild(browsePage, "galleryInfoText");
-        const card = findChild(browsePage, "galleryCard-0");
+        const card = findChild(browsePage, "galleryDelegate-0");
         verify(infoText !== null);
         verify(card !== null);
         compare(infoText.text, mockController.galleryInfoText);
@@ -85,5 +85,24 @@ TestCase {
         compare(mockController.sortMode, 2);
         sortModified.triggered();
         compare(mockController.sortMode, 1);
+    }
+
+    function test_renameAndTrashConfirmationsAreQmlDialogs() {
+        mockController.clearSelection();
+        mockController.selectPath(mockController.thumbnails.get(0).path, false, false);
+
+        const renameDialog = findChild(browsePage, "renameDialog");
+        verify(renameDialog !== null);
+        mockController.renameSelected();
+        tryCompare(renameDialog, "opened", true);
+        compare(renameDialog.inputText, "XAG040_0001.JPG");
+        renameDialog.close();
+
+        const trashDialog = findChild(browsePage, "trashConfirmationDialog");
+        verify(trashDialog !== null);
+        mockController.moveSelectedToTrash();
+        tryCompare(trashDialog, "opened", true);
+        verify(trashDialog.message.indexOf("selected item") >= 0);
+        trashDialog.close();
     }
 }

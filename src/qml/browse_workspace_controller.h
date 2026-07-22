@@ -14,7 +14,7 @@ class BrowseController;
 class IImageDecoder;
 class ImageLoader;
 
-// Owns the embedded 0-4 file-manager workspace. Each pane keeps an independent
+// Owns the embedded 1-4 file-manager workspace. Each pane keeps an independent
 // browsing session while decoding and thumbnail caches remain shared.
 class BrowseWorkspaceController final : public QObject {
     Q_OBJECT
@@ -57,6 +57,7 @@ class BrowseWorkspaceController final : public QObject {
                                 bool toggle = false);
     Q_INVOKABLE void setActiveDisplayMode(int mode);
     Q_INVOKABLE void compareSelected();
+    Q_INVOKABLE void refreshAll();
 
   signals:
     void panesChanged();

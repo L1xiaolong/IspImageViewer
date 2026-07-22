@@ -2,12 +2,14 @@
 #include "qml/browse_controller.h"
 #include "qml/browse_workspace_controller.h"
 #include "qml/compare_controller.h"
+#include "qml/image_properties_controller.h"
+#include "qml/full_screen_controller.h"
+#include "qml/raw_parameters_controller.h"
 #include "qml/thumbnail_image_provider.h"
 
-#include <QApplication>
 #include <QCoreApplication>
-#include <QIcon>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
@@ -17,7 +19,7 @@
 #include <QUrl>
 
 int main(int argc, char* argv[]) {
-    QApplication app(argc, argv);
+    QGuiApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("ISP Image Viewer"));
     QCoreApplication::setOrganizationName(QStringLiteral("ISPView"));
     QCoreApplication::setApplicationVersion(QStringLiteral("0.2.3"));
@@ -47,7 +49,7 @@ int main(int argc, char* argv[]) {
             screenshotDelay = qMax(250, arguments.at(++i).toInt());
         } else if (arguments.at(i) == QStringLiteral("--file-managers") &&
                    i + 1 < arguments.size()) {
-            initialFileManagerCount = qBound(0, arguments.at(++i).toInt(), 4);
+            initialFileManagerCount = qBound(1, arguments.at(++i).toInt(), 4);
         } else if (arguments.at(i) == QStringLiteral("--qml-compare")) {
             while (i + 1 < arguments.size() && !arguments.at(i + 1).startsWith(QLatin1Char('-'))) {
                 initialComparePaths.append(QFileInfo(arguments.at(++i)).absoluteFilePath());
@@ -65,17 +67,22 @@ int main(int argc, char* argv[]) {
 
     const auto decoder = ispview::createDefaultImageDecoder();
     ispview::BrowseWorkspaceController browseController(decoder, initialDirectory);
-    if (initialFileManagerCount == 0) {
-        browseController.closePane(0);
-    } else {
-        while (browseController.paneCount() < initialFileManagerCount)
-            browseController.addFileManagerPane();
-    }
+    while (browseController.paneCount() < initialFileManagerCount)
+        browseController.addFileManagerPane();
     ispview::CompareController compareController(browseController.loader());
+    ispview::ImagePropertiesController imagePropertiesController(browseController.loader());
+    ispview::FullScreenController fullScreenController(browseController.loader());
+    ispview::RawParametersController rawParametersController(browseController.loader());
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("browseController"), &browseController);
     engine.rootContext()->setContextProperty(QStringLiteral("compareController"), &compareController);
+    engine.rootContext()->setContextProperty(QStringLiteral("imagePropertiesController"),
+                                             &imagePropertiesController);
+    engine.rootContext()->setContextProperty(QStringLiteral("fullScreenController"),
+                                             &fullScreenController);
+    engine.rootContext()->setContextProperty(QStringLiteral("rawParametersController"),
+                                             &rawParametersController);
     engine.rootContext()->setContextProperty(QStringLiteral("initialComparePaths"), initialComparePaths);
     engine.addImageProvider(QStringLiteral("thumbnail"),
                             new ispview::ThumbnailImageProvider(decoder,
@@ -107,6 +114,7 @@ int main(int argc, char* argv[]) {
                 app.exit(2);
                 return;
             }
+            window->setProperty("forceApplicationClose", true);
             app.quit();
         });
     }

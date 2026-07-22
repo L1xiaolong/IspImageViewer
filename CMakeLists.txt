@@ -73,12 +73,15 @@ if(ISPVIEW_ENABLE_LCMS2)
 endif()
 
 find_package(Qt6 6.7 REQUIRED COMPONENTS
-    Core Gui Widgets Quick QuickControls2 QuickLayouts QuickTemplates2 Svg ShaderTools
+    Core Gui Quick QuickControls2 QuickLayouts QuickTemplates2 Svg ShaderTools
 )
 find_package(Qt6GuiPrivate 6.7 CONFIG REQUIRED)
 
 if(BUILD_TESTING OR ISPVIEW_BUILD_BENCHMARKS)
     find_package(Qt6 6.7 REQUIRED COMPONENTS Test)
+endif()
+if(BUILD_TESTING)
+    find_package(Qt6 6.7 REQUIRED COMPONENTS QuickTest)
 endif()
 
 # macOS 26 keeps the legacy AGL framework directory but removes its binary. Qt 6.9's

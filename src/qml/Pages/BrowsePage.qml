@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 // qmllint disable unqualified
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs as PlatformDialogs
 import "../Isp"
 
 Rectangle {
@@ -12,6 +13,8 @@ Rectangle {
     // 2D puppet does not instantiate custom components with required var props.
     property var controller: null
     property var workspaceController: controller
+    property var propertiesController: null
+    property var rawController: null
     property bool navigatorVisible: true
     property real navigatorWidth: Theme.sidebarWidth
     property real galleryStripWidth: 280
@@ -19,11 +22,16 @@ Rectangle {
     property bool designMode: false
     property string iconPrefix: "qrc:/icons/ui/"
     readonly property var sortLabels: ["Name", "Modified", "Size", "Type"]
+    signal fullScreenRequested(var paths, int initialIndex)
     readonly property bool fileShortcutsEnabled: (workspaceController.hasActivePane === undefined ||
                                                   workspaceController.hasActivePane) &&
                                                   !toolbar.searchControl.activeFocus &&
-                                                  !folderNameField.activeFocus &&
-                                                  !newFolderDialog.opened
+                                                  !newFolderDialog.opened &&
+                                                  !renameDialog.opened &&
+                                                  !trashDialog.opened &&
+                                                  !propertiesDialog.opened &&
+                                                  !rawParametersDialog.opened &&
+                                                  !folderPicker.visible
     function pathIsRaw(path) {
         const lowered = path.toLowerCase();
         return lowered.endsWith(".raw") || lowered.endsWith(".yuv");
@@ -34,329 +42,12 @@ Rectangle {
         if (toolbar.searchControl.text !== root.controller.filterText)
             toolbar.searchControl.text = root.controller.filterText || ""
     }
-
-    // Retained temporarily as a hidden migration reference. The visible and
-    // interactive toolbar below is the same TopToolbar.ui.qml opened by Design Studio.
-    Rectangle {
-        id: legacyToolbar
-        visible: false
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: parent.top
-        height: Theme.toolbarHeight
-        color: Theme.paperWhite
-        border.color: Theme.opticalGray
-        border.width: 0
-
-        Item {
-            id: toolbarContent
-            anchors.fill: parent
-            readonly property bool compact: width < 1220
-
-            Text {
-                id: productName
-                visible: !toolbarContent.compact
-                x: 20
-                width: 166
-                anchors.verticalCenter: parent.verticalCenter
-                text: "ISP Image Viewer"
-                color: Theme.graphiteInk
-                font.family: Theme.uiFont
-                font.pixelSize: 17
-                font.weight: Font.DemiBold
-            }
-
-            Rectangle {
-                id: brandDivider
-                visible: !toolbarContent.compact
-                x: 198
-                y: 19
-                width: 1
-                height: 26
-                color: Theme.opticalGray
-            }
-
-            Item {
-                id: primaryToolCluster
-                x: toolbarContent.compact ? 12 : 210
-                y: 12
-                width: 598
-                height: 40
-                transformOrigin: Item.Left
-                scale: toolbarContent.compact
-                       ? Math.max(0.78, Math.min(1, (toolbarContent.width - 430) / width))
-                       : 1
-
-                Row {
-                    x: 0
-                    y: 0
-                    spacing: 2
-                    AppIconButton {
-                        iconSource: root.iconPrefix + "grid.svg"
-                        toolTipText: "Grid view"
-                        checkable: true
-                        checked: root.displayMode === 0
-                        implicitWidth: 40
-                        implicitHeight: 40
-                        onClicked: root.controller.setDisplayMode(0)
-                    }
-                    AppIconButton {
-                        iconSource: root.iconPrefix + "list.svg"
-                        toolTipText: "List view"
-                        checkable: true
-                        checked: root.displayMode === 1
-                        implicitWidth: 40
-                        implicitHeight: 40
-                        onClicked: root.controller.setDisplayMode(1)
-                    }
-                    AppIconButton {
-                        iconSource: root.iconPrefix + "columns.svg"
-                        toolTipText: "Compact view"
-                        checkable: true
-                        checked: root.displayMode === 2
-                        implicitWidth: 40
-                        implicitHeight: 40
-                        onClicked: root.controller.setDisplayMode(2)
-                    }
-                }
-
-                Rectangle {
-                    x: 138
-                    y: 7
-                    width: 1
-                    height: 26
-                    color: Theme.opticalGray
-                }
-
-                Slider {
-                    id: thumbnailSizeSlider
-                    objectName: "thumbnailSizeSlider"
-                    x: 156
-                    y: 0
-                    width: 146
-                    height: 40
-                    from: 168
-                    to: 260
-                    stepSize: 4
-                    value: root.controller.gridCellWidth
-                    onMoved: root.controller.gridCellWidth = Math.round(value)
-                    ToolTip.visible: hovered || pressed
-                    ToolTip.text: Math.round(value) + " px"
-                    background: Rectangle {
-                        x: thumbnailSizeSlider.leftPadding
-                        y: thumbnailSizeSlider.topPadding + thumbnailSizeSlider.availableHeight / 2 - 1
-                        width: thumbnailSizeSlider.availableWidth
-                        height: 2
-                        radius: 1
-                        color: Theme.opticalGray
-                        Rectangle {
-                            width: thumbnailSizeSlider.visualPosition * parent.width
-                            height: parent.height
-                            radius: 1
-                            color: Theme.mutedInk
-                        }
-                    }
-                    handle: Rectangle {
-                        x: thumbnailSizeSlider.leftPadding + thumbnailSizeSlider.visualPosition * (thumbnailSizeSlider.availableWidth - width)
-                        y: thumbnailSizeSlider.topPadding + thumbnailSizeSlider.availableHeight / 2 - height / 2
-                        width: 16
-                        height: 16
-                        radius: 8
-                        color: Theme.paperWhite
-                        border.color: thumbnailSizeSlider.activeFocus ? Theme.probeBlue : Theme.opticalGray
-                        border.width: thumbnailSizeSlider.activeFocus ? 2 : 1
-                    }
-                }
-
-                Rectangle {
-                    x: 318
-                    y: 7
-                    width: 1
-                    height: 26
-                    color: Theme.opticalGray
-                }
-
-                Button {
-                    id: sortButton
-                    objectName: "sortButton"
-                    x: 332
-                    y: 0
-                    width: 136
-                    height: 40
-                    hoverEnabled: true
-                    onClicked: sortMenu.popup()
-                    background: Rectangle {
-                        color: sortButton.down ? Theme.opticalGray : sortButton.hovered ? Theme.softHover : "transparent"
-                        radius: Theme.radius
-                        border.color: sortButton.activeFocus ? Theme.probeBlue : "transparent"
-                        border.width: 1
-                    }
-                    contentItem: Row {
-                        anchors.centerIn: parent
-                        spacing: 6
-                        Text {
-                            text: "Sort:  " + root.sortLabels[root.controller.sortMode]
-                            color: Theme.graphiteInk
-                            font.family: Theme.uiFont
-                            font.pixelSize: 13
-                        }
-                        Image {
-                            width: 16
-                            height: 16
-                            source: root.iconPrefix + "chevron-down.svg"
-                        }
-                    }
-                }
-
-                Rectangle {
-                    x: 482
-                    y: 7
-                    width: 1
-                    height: 26
-                    color: Theme.opticalGray
-                }
-
-                Rectangle {
-                    x: 498
-                    y: 0
-                    width: 100
-                    height: 40
-                    color: "transparent"
-                    radius: Theme.radius
-                    border.color: Theme.opticalGray
-                    border.width: 1
-
-                    AppIconButton {
-                        id: folderButton
-                        anchors.left: parent.left
-                        anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        width: 61
-                        iconSource: root.iconPrefix + "folder-open.svg"
-                        toolTipText: "Folder operations"
-                        onClicked: folderMenu.popup()
-                        Image {
-                            anchors.right: parent.right
-                            anchors.rightMargin: 4
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 14
-                            height: 14
-                            source: root.iconPrefix + "chevron-down.svg"
-                        }
-                    }
-                    Rectangle {
-                        anchors.left: folderButton.right
-                        anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        width: 1
-                        color: Theme.opticalGray
-                    }
-                    AppIconButton {
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        width: 38
-                        iconSource: root.iconPrefix + "plus.svg"
-                        toolTipText: "New folder"
-                        onClicked: newFolderDialog.open()
-                    }
-                }
-            }
-
-            Button {
-                id: compareButton
-                objectName: "compareButton"
-                anchors.right: parent.right
-                anchors.rightMargin: 20
-                y: 12
-                width: 126
-                height: 40
-                enabled: root.workspaceController.canCompare
-                hoverEnabled: true
-                onClicked: root.workspaceController.compareSelected()
-                background: Rectangle {
-                    color: compareButton.enabled && (compareButton.down || compareButton.hovered) ? "#E7EDFC" : Theme.paperWhite
-                    radius: Theme.radius
-                    border.color: compareButton.enabled ? Theme.probeBlue : Theme.opticalGray
-                    border.width: 1
-                }
-                contentItem: Row {
-                    anchors.centerIn: parent
-                    spacing: 7
-                    Image {
-                        width: 18
-                        height: 18
-                        opacity: compareButton.enabled ? 1 : 0.42
-                        source: root.iconPrefix + "compare.svg"
-                    }
-                    Text {
-                        text: "Compare"
-                        color: compareButton.enabled ? Theme.probeBlue : Theme.mutedInk
-                        font.family: Theme.uiFont
-                        font.pixelSize: 13
-                        font.weight: Font.DemiBold
-                    }
-                }
-                ToolTip.visible: hovered && !enabled
-                ToolTip.text: "Select 2–4 images to compare"
-            }
-
-            TextField {
-                id: searchField
-                objectName: "browserSearchField"
-                anchors.right: compareButton.left
-                anchors.rightMargin: 12
-                y: 12
-                width: 244
-                height: 40
-                placeholderText: "Search files"
-                selectByMouse: true
-                leftPadding: 34
-                rightPadding: clearSearch.visible ? 30 : 10
-                color: Theme.graphiteInk
-                font.family: Theme.uiFont
-                font.pixelSize: 13
-                background: Rectangle {
-                    color: Theme.sensorWhite
-                    radius: Theme.radius
-                    border.color: searchField.activeFocus ? Theme.probeBlue : Theme.opticalGray
-                    border.width: 1
-                    Image {
-                        x: 9
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 18
-                        height: 18
-                        source: root.iconPrefix + "search.svg"
-                    }
-                }
-                Text {
-                    id: clearSearch
-                    visible: searchField.text.length > 0
-                    anchors.right: parent.right
-                    anchors.rightMargin: 9
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "×"
-                    color: clearMouse.containsMouse ? Theme.graphiteInk : Theme.mutedInk
-                    font.pixelSize: 17
-                    MouseArea {
-                        id: clearMouse
-                        anchors.fill: parent
-                        anchors.margins: -7
-                        hoverEnabled: true
-                        onClicked: searchField.clear()
-                    }
-                }
-                onTextChanged: root.controller.setFilterText(text)
-            }
-        }
-        Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            height: 1
-            color: Theme.opticalGray
-        }
+    function paneController(index) {
+        const availablePanes = root.workspaceController.panes
+        return availablePanes && index >= 0 && index < availablePanes.length
+                ? availablePanes[index] : root.controller
     }
+
 
     TopToolbar {
         id: toolbar
@@ -572,7 +263,7 @@ Rectangle {
             anchors.fill: parent
             sourceComponent: {
                 const count = root.workspaceController.paneCount
-                if (count === 1) return singlePaneComponent
+                if (count <= 1) return singlePaneComponent
                 if (count === 4) return fourPaneComponent
                 return horizontalPanesComponent
             }
@@ -582,7 +273,7 @@ Rectangle {
     Component {
         id: singlePaneComponent
         BrowserPane {
-            controller: root.workspaceController.panes[0]
+            controller: root.paneController(0)
             workspaceController: root.workspaceController
             paneIndex: 0
             iconPrefix: root.iconPrefix
@@ -595,8 +286,22 @@ Rectangle {
         SplitView {
             id: horizontalSplit
             orientation: Qt.Horizontal
-            property int resetGeneration: 0
-            function resetEqual() { resetGeneration += 1 }
+            function resetEqual() {
+                const equalWidth = (width - Math.max(0, paneRepeater.count - 1) * 7) /
+                                   Math.max(1, paneRepeater.count)
+                for (let index = 0; index < paneRepeater.count; ++index) {
+                    const pane = paneRepeater.itemAt(index)
+                    if (pane)
+                        pane.SplitView.preferredWidth = 1
+                }
+                Qt.callLater(function() {
+                    for (let index = 0; index < paneRepeater.count; ++index) {
+                        const pane = paneRepeater.itemAt(index)
+                        if (pane)
+                            pane.SplitView.preferredWidth = equalWidth
+                    }
+                })
+            }
             handle: Rectangle {
                 objectName: "horizontalPaneHandle"
                 implicitWidth: 7
@@ -615,7 +320,7 @@ Rectangle {
                 delegate: BrowserPane {
                     required property var modelData
                     required property int index
-                    controller: modelData
+                    controller: modelData || root.controller
                     workspaceController: root.workspaceController
                     paneIndex: index
                     iconPrefix: root.iconPrefix
@@ -624,12 +329,6 @@ Rectangle {
                     SplitView.preferredWidth: (horizontalSplit.width -
                                                Math.max(0, paneRepeater.count - 1) * 7) /
                                               Math.max(1, paneRepeater.count)
-                    property int observedResetGeneration: horizontalSplit.resetGeneration
-                    onObservedResetGenerationChanged: {
-                        SplitView.preferredWidth = (horizontalSplit.width -
-                                                    Math.max(0, paneRepeater.count - 1) * 7) /
-                                                   Math.max(1, paneRepeater.count)
-                    }
                     onNewFolderRequested: newFolderDialog.open()
                 }
             }
@@ -642,8 +341,13 @@ Rectangle {
             id: verticalSplit
             orientation: Qt.Vertical
             function resetEqual() {
-                topRow.SplitView.preferredHeight = (verticalSplit.height - 7) / 2
-                bottomRow.SplitView.preferredHeight = (verticalSplit.height - 7) / 2
+                const equalHeight = (verticalSplit.height - 7) / 2
+                topRow.SplitView.preferredHeight = 1
+                bottomRow.SplitView.preferredHeight = 1
+                Qt.callLater(function() {
+                    topRow.SplitView.preferredHeight = equalHeight
+                    bottomRow.SplitView.preferredHeight = equalHeight
+                })
             }
             handle: Rectangle {
                 objectName: "verticalPaneHandle"
@@ -664,8 +368,13 @@ Rectangle {
                 SplitView.minimumHeight: 190
                 SplitView.preferredHeight: (verticalSplit.height - 7) / 2
                 function resetEqual() {
-                    topLeft.SplitView.preferredWidth = (topRow.width - 7) / 2
-                    topRight.SplitView.preferredWidth = (topRow.width - 7) / 2
+                    const equalWidth = (topRow.width - 7) / 2
+                    topLeft.SplitView.preferredWidth = 1
+                    topRight.SplitView.preferredWidth = 1
+                    Qt.callLater(function() {
+                        topLeft.SplitView.preferredWidth = equalWidth
+                        topRight.SplitView.preferredWidth = equalWidth
+                    })
                 }
                 handle: Rectangle {
                     objectName: "topRowPaneHandle"
@@ -676,7 +385,7 @@ Rectangle {
                 }
                 BrowserPane {
                     id: topLeft
-                    controller: root.workspaceController.panes[0]
+                    controller: root.paneController(0)
                     workspaceController: root.workspaceController
                     paneIndex: 0
                     iconPrefix: root.iconPrefix
@@ -687,7 +396,7 @@ Rectangle {
                 }
                 BrowserPane {
                     id: topRight
-                    controller: root.workspaceController.panes[1]
+                    controller: root.paneController(1)
                     workspaceController: root.workspaceController
                     paneIndex: 1
                     iconPrefix: root.iconPrefix
@@ -704,8 +413,13 @@ Rectangle {
                 SplitView.minimumHeight: 190
                 SplitView.preferredHeight: (verticalSplit.height - 7) / 2
                 function resetEqual() {
-                    bottomLeft.SplitView.preferredWidth = (bottomRow.width - 7) / 2
-                    bottomRight.SplitView.preferredWidth = (bottomRow.width - 7) / 2
+                    const equalWidth = (bottomRow.width - 7) / 2
+                    bottomLeft.SplitView.preferredWidth = 1
+                    bottomRight.SplitView.preferredWidth = 1
+                    Qt.callLater(function() {
+                        bottomLeft.SplitView.preferredWidth = equalWidth
+                        bottomRight.SplitView.preferredWidth = equalWidth
+                    })
                 }
                 handle: Rectangle {
                     objectName: "bottomRowPaneHandle"
@@ -716,7 +430,7 @@ Rectangle {
                 }
                 BrowserPane {
                     id: bottomLeft
-                    controller: root.workspaceController.panes[2]
+                    controller: root.paneController(2)
                     workspaceController: root.workspaceController
                     paneIndex: 2
                     iconPrefix: root.iconPrefix
@@ -727,7 +441,7 @@ Rectangle {
                 }
                 BrowserPane {
                     id: bottomRight
-                    controller: root.workspaceController.panes[3]
+                    controller: root.paneController(3)
                     workspaceController: root.workspaceController
                     paneIndex: 3
                     iconPrefix: root.iconPrefix
@@ -1230,6 +944,7 @@ Rectangle {
 
                 delegate: Item {
                     id: galleryDelegate
+                    objectName: "galleryDelegate-" + galleryDelegate.index
                     required property int index
                     required property string path
                     required property string fileName
@@ -1609,138 +1324,96 @@ Rectangle {
         }
     }
 
-    Dialog {
+    PlatformDialogs.FolderDialog {
+        id: folderPicker
+        title: "Open folder"
+        onAccepted: root.controller.openDirectoryUrl(selectedFolder)
+    }
+
+    AppTextInputDialog {
         id: newFolderDialog
         objectName: "newFolderDialog"
-        modal: true
-        focus: true
-        width: 360
-        height: 222
-        x: Math.round((root.width - width) / 2)
-        y: Math.round((root.height - height) / 2)
-        padding: 0
-        closePolicy: Popup.CloseOnEscape
-
-        onOpened: {
-            folderNameField.text = "New folder";
-            folderError.text = "";
-            folderNameField.forceActiveFocus();
-            folderNameField.selectAll();
-        }
-
-        Overlay.modal: Rectangle {
-            color: "#330E1820"
-        }
-
-        background: Rectangle {
-            color: "#FCFDFC"
-            radius: 10
-            border.color: "#D7DEE3"
-            border.width: 1
-        }
-
-        contentItem: Item {
-            Text {
-                x: 22
-                y: 20
-                text: "New folder"
-                color: "#2E3A43"
-                font.family: Theme.uiFont
-                font.pixelSize: 17
-                font.weight: Font.DemiBold
-            }
-            Text {
-                x: 22
-                y: 51
-                text: "Create a folder in " + root.controller.currentFolderName
-                color: Theme.mutedInk
-                font.family: Theme.uiFont
-                font.pixelSize: 12
-            }
-            TextField {
-                id: folderNameField
-                x: 22
-                y: 79
-                width: parent.width - 44
-                height: 38
-                leftPadding: 11
-                rightPadding: 11
-                selectByMouse: true
-                color: Theme.graphiteInk
-                font.family: Theme.uiFont
-                font.pixelSize: 13
-                onAccepted: createFolderButton.clicked()
-                background: Rectangle {
-                    color: "#FFFFFF"
-                    radius: 6
-                    border.color: folderNameField.activeFocus ? "#7893A6" : "#D7DEE3"
-                    border.width: folderNameField.activeFocus ? 2 : 1
-                }
-            }
-            Text {
-                id: folderError
-                x: 22
-                y: 124
-                width: parent.width - 44
-                color: Theme.danger
-                font.family: Theme.uiFont
-                font.pixelSize: 11
-                elide: Text.ElideRight
-            }
-            Button {
-                id: cancelFolderButton
-                x: parent.width - 194
-                y: 166
-                width: 76
-                height: 34
-                text: "Cancel"
-                onClicked: newFolderDialog.close()
-                contentItem: Text {
-                    text: cancelFolderButton.text
-                    color: Theme.graphiteInk
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    font.family: Theme.uiFont
-                    font.pixelSize: 13
-                }
-                background: Rectangle {
-                    radius: 6
-                    color: cancelFolderButton.down ? "#E2E9ED" : cancelFolderButton.hovered ? "#F1F5F7" : "#FFFFFF"
-                    border.color: "#D7DEE3"
-                    border.width: 1
-                }
-            }
-            Button {
-                id: createFolderButton
-                x: parent.width - 110
-                y: 166
-                width: 88
-                height: 34
-                text: "Create"
-                enabled: folderNameField.text.trim().length > 0
-                onClicked: {
-                    const error = root.controller.createFolder(folderNameField.text);
-                    if (error.length === 0)
-                        newFolderDialog.close();
-                    else
-                        folderError.text = error;
-                }
-                contentItem: Text {
-                    text: createFolderButton.text
-                    color: createFolderButton.enabled ? "#FFFFFF" : "#A9B2B8"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    font.family: Theme.uiFont
-                    font.pixelSize: 13
-                    font.weight: Font.DemiBold
-                }
-                background: Rectangle {
-                    radius: 6
-                    color: !createFolderButton.enabled ? "#E7EBEE" : createFolderButton.down ? "#49677A" : createFolderButton.hovered ? "#607E92" : "#526F82"
-                }
-            }
+        parent: root
+        dialogTitle: "New folder"
+        description: "Create a folder in " + root.controller.currentFolderName
+        initialText: "New folder"
+        acceptText: "Create"
+        onSubmitted: function(text) {
+            complete(root.controller.createFolder(text))
         }
     }
+
+    AppTextInputDialog {
+        id: renameDialog
+        objectName: "renameDialog"
+        parent: root
+        dialogTitle: "Rename item"
+        description: "Enter a new name for the selected item"
+        acceptText: "Rename"
+        onSubmitted: function(text) {
+            complete(root.controller.renameSelectedTo(text))
+        }
+    }
+
+    AppConfirmDialog {
+        id: trashDialog
+        objectName: "trashConfirmationDialog"
+        parent: root
+        dialogTitle: "Move to Trash?"
+        confirmText: "Move"
+        destructive: true
+        onConfirmed: {
+            complete(root.controller.moveSelectedToTrashConfirmed())
+        }
+    }
+
+    ImagePropertiesDialog {
+        id: propertiesDialog
+        parent: root
+        controller: root.propertiesController
+        iconPrefix: root.iconPrefix
+    }
+
+    RawParametersDialog {
+        id: rawParametersDialog
+        parent: root
+        controller: root.rawController
+        iconPrefix: root.iconPrefix
+    }
+
+    Connections {
+        target: root.controller
+        ignoreUnknownSignals: true
+
+        function onDirectorySelectionRequested(initialFolder) {
+            folderPicker.currentFolder = initialFolder
+            folderPicker.open()
+        }
+
+        function onRenameRequested(currentName) {
+            renameDialog.openWith(currentName)
+        }
+
+        function onTrashConfirmationRequested(itemCount) {
+            trashDialog.message = itemCount === 1
+                    ? "The selected item will be moved to the system Trash."
+                    : itemCount + " selected items will be moved to the system Trash."
+            trashDialog.showConfirmation()
+        }
+
+        function onPropertiesRequested(path) {
+            propertiesDialog.openForPath(path)
+        }
+
+        function onFullScreenRequested(paths, initialIndex) {
+            root.fullScreenRequested(paths, initialIndex)
+        }
+
+        function onRawParametersRequested(path) {
+            rawParametersDialog.openForPath(path)
+        }
+    }
+
 
     Shortcut {
         sequence: StandardKey.Open

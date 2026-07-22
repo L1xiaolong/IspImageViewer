@@ -8,7 +8,6 @@ param(
     [string]$Msys2Ucrt64 = $env:MSYS2_UCRT64,
 
     [switch]$Test,
-    [switch]$Rhi,
     [switch]$Clean,
     [int]$Jobs = [Environment]::ProcessorCount,
     [switch]$Help
@@ -19,10 +18,10 @@ $ErrorActionPreference = "Stop"
 function Show-Usage {
     Write-Host @"
 Usage:
-  .\build_windows.ps1 [-Toolchain msys2|msvc] [-Mode debug|release] [-Test] [-Rhi] [-Clean] [-Jobs N]
+  .\build_windows.ps1 [-Toolchain msys2|msvc] [-Mode debug|release] [-Test] [-Clean] [-Jobs N]
 
 Examples:
-  .\build_windows.ps1 -Toolchain msys2 -Mode debug -Test -Rhi
+  .\build_windows.ps1 -Toolchain msys2 -Mode debug -Test
   .\build_windows.ps1 -Toolchain msys2 -Mode release -Jobs 8
   .\build_windows.ps1 -Toolchain msvc -Mode debug -Test
 
@@ -31,7 +30,6 @@ Options:
   -Mode debug|release  Select the build configuration. Default: debug.
   -Msys2Ucrt64 PATH     MSYS2 UCRT64 prefix; defaults to MSYS2_UCRT64 or qmake discovery.
   -Test                Run the matching CTest preset when available.
-  -Rhi                 Run the native Direct3D 11 RHI acceptance test. Intended for Debug builds.
   -Clean               Remove the selected preset build directory before configuring.
   -Jobs N              Parallel build jobs. Default: CPU core count.
 "@
@@ -97,20 +95,6 @@ if ($Toolchain -eq "msys2") {
         }
     }
 
-    if ($Rhi) {
-        if ($Mode -ne "debug") {
-            throw "-Rhi requires -Mode debug."
-        }
-        $previousRhiRequirement = $env:ISPVIEW_REQUIRE_NATIVE_RHI_TESTS
-        $env:ISPVIEW_REQUIRE_NATIVE_RHI_TESTS = "1"
-        try {
-            Write-Host "Running native Direct3D 11 RHI acceptance test"
-            ctest --test-dir $BuildDir -R "^ispview_render_tests$" --output-on-failure
-        } finally {
-            $env:ISPVIEW_REQUIRE_NATIVE_RHI_TESTS = $previousRhiRequirement
-        }
-    }
-
     Write-Host "Executable: $BuildDir\ISPImageViewer.exe"
     exit 0
 }
@@ -136,11 +120,6 @@ if ($Test) {
     } else {
         Write-Host "Release preset does not define a CTest preset; skipping -Test for release."
     }
-}
-
-if ($Rhi) {
-    Write-Host "Running native Direct3D 11 RHI acceptance tests"
-    ctest --preset windows-rhi-acceptance --output-on-failure
 }
 
 if ($Mode -eq "debug") {

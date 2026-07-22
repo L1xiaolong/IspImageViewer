@@ -9,11 +9,7 @@
 
 #include <QFileInfo>
 #include <QPointer>
-#include <QDateTime>
-#include <QFileDialog>
-#include <QGuiApplication>
 #include <QSettings>
-#include <QStandardPaths>
 #include <QThreadPool>
 
 #include <algorithm>
@@ -277,19 +273,6 @@ QVariantList CompareController::pixelTexts(int sourceSlot, int x, int y) const {
                           : QStringLiteral("Outside image"));
     }
     return values;
-}
-
-QString CompareController::chooseScreenshotPath() {
-    QString directory = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
-    if (directory.isEmpty()) directory = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
-    QFileDialog dialog(nullptr, QStringLiteral("Save Comparison Screenshot"), directory,
-                       QStringLiteral("PNG Images (*.png)"));
-    dialog.setAcceptMode(QFileDialog::AcceptSave);
-    dialog.setFileMode(QFileDialog::AnyFile);
-    dialog.setDefaultSuffix(QStringLiteral("png"));
-    dialog.selectFile(QStringLiteral("screen_shot_%1.png").arg(QDateTime::currentMSecsSinceEpoch()));
-    if (QGuiApplication::platformName() == QStringLiteral("offscreen")) dialog.setOption(QFileDialog::DontUseNativeDialog);
-    return dialog.exec() == QDialog::Accepted && !dialog.selectedFiles().isEmpty() ? dialog.selectedFiles().constFirst() : QString{};
 }
 
 void CompareController::requestHistogram(int slot) {

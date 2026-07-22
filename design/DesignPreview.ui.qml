@@ -1,5 +1,5 @@
 import QtQuick
-import Pages 1.0
+import "../src/qml/Pages"
 
 // Design Studio composition root.
 // This file contains no duplicated visual implementation: every visible item
@@ -13,11 +13,21 @@ Item {
         id: mockWorkspace
     }
 
+    MockImagePropertiesController {
+        id: mockImageProperties
+    }
+
+    MockRawParametersController {
+        id: mockRawParameters
+    }
+
     BrowsePage {
         id: productionBrowsePage
         anchors.fill: parent
         controller: mockWorkspace.activePane
         workspaceController: mockWorkspace
+        propertiesController: mockImageProperties
+        rawController: mockRawParameters
         designMode: true
         iconPrefix: Qt.resolvedUrl("../assets/icons/ui/").toString()
     }

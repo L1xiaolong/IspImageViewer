@@ -2,19 +2,25 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import QtCore
+import QtQuick.Dialogs as PlatformDialogs
 import QtQuick.Layouts
 import "../Isp"
 
 Item {
     id: root
+    objectName: "comparePage"
 
     required property var controller
+    property bool designMode: false
     property var paths: []
     property var pixelValues: []
     property string transientMessage: ""
     property bool transientError: false
+    readonly property var comparisonCanvas: comparisonCanvasLoader.item
 
     signal closeRequested()
+    signal screenshotFinished(bool success, url destination)
 
     function open(selectedPaths) {
         paths = selectedPaths
@@ -46,17 +52,27 @@ Item {
     }
 
     function saveScreenshot() {
+        const pictures = StandardPaths.writableLocation(StandardPaths.PicturesLocation)
+        if (pictures && pictures.toString().length > 0)
+            screenshotSaveDialog.currentFolder = pictures
+        screenshotSaveDialog.selectedFile = screenshotSaveDialog.currentFolder
+                + "/screen_shot_" + Date.now() + ".png"
+        screenshotSaveDialog.open()
+    }
+
+    function captureScreenshot(destination) {
         const scheduled = stage.grabToImage(function(result) {
-            const path = root.controller.chooseScreenshotPath()
-            if (!path)
-                return
-            if (result.saveToFile(path))
+            const saved = result.saveToFile(destination)
+            if (saved)
                 root.showTransientMessage("Screenshot saved", false)
             else
                 root.showTransientMessage("Unable to save screenshot", true)
+            root.screenshotFinished(saved, destination)
         })
-        if (!scheduled)
+        if (!scheduled) {
             root.showTransientMessage("Unable to capture comparison", true)
+            root.screenshotFinished(false, destination)
+        }
     }
 
     function comparisonFileText(slot) {
@@ -108,6 +124,16 @@ Item {
     function requestHistograms() {
         for (let slot = 0; slot < root.paths.length; ++slot)
             root.controller.requestHistogram(slot)
+    }
+
+    PlatformDialogs.FileDialog {
+        id: screenshotSaveDialog
+        objectName: "comparisonScreenshotSaveDialog"
+        title: "Save comparison screenshot"
+        fileMode: PlatformDialogs.FileDialog.SaveFile
+        nameFilters: ["PNG image (*.png)"]
+        defaultSuffix: "png"
+        onAccepted: root.captureScreenshot(selectedFile)
     }
 
     Keys.onEscapePressed: closeRequested()
@@ -291,6 +317,7 @@ Item {
             }
 
             AppIconButton {
+                objectName: "saveComparisonScreenshotButton"
                 controlSize: 28
                 renderedIconSize: 16
                 iconSource: "qrc:/icons/ui/screenshot.svg"
@@ -300,6 +327,7 @@ Item {
         }
 
         AppIconButton {
+            objectName: "closeComparisonButton"
             anchors.right: parent.right
             anchors.rightMargin: 6
             anchors.verticalCenter: parent.verticalCenter
@@ -319,16 +347,22 @@ Item {
         anchors.right: parent.right
         clip: true
 
-        ImageCanvas {
-            id: comparisonCanvas
+        Loader {
+            id: comparisonCanvasLoader
             anchors.fill: parent
-            presentationMode: root.controller.presentationMode
-            compareAmount: root.controller.splitAmount
-            viewSynchronized: true
+            source: root.designMode
+                    ? Qt.resolvedUrl("../Isp/DesignCompareCanvas.qml")
+                    : Qt.resolvedUrl("../Isp/ProductionCompareCanvas.qml")
+            onLoaded: {
+                if (item)
+                    item.controller = root.controller
+            }
+        }
 
-            Component.onCompleted: root.controller.attachCanvas(comparisonCanvas)
-            onCompareAmountChanged: root.controller.setSplitAmount(comparisonCanvas.compareAmount)
-            onPixelHovered: function(sourceSlot, pixel, color, valid) {
+        Connections {
+            target: root.comparisonCanvas
+            ignoreUnknownSignals: true
+            function onPixelHovered(sourceSlot, pixel, colorValue, valid) {
                 if (valid)
                     root.pixelValues = root.controller.pixelTexts(sourceSlot, pixel.x, pixel.y)
             }
@@ -357,7 +391,7 @@ Item {
         }
         Rectangle {
             visible: root.controller.presentationMode === 1 && root.paths.length === 2
-            x: comparisonCanvas.dividerPosition - 0.5
+            x: root.comparisonCanvas ? root.comparisonCanvas.dividerPosition - 0.5 : 0
             width: 1
             height: parent.height
             color: "#E6E8E8"
@@ -371,18 +405,20 @@ Item {
 
                 required property int index
                 property var navigationData: {
-                    const currentNavigationRevision = comparisonCanvas.navigationRevision
-                    return comparisonCanvas.navigationState(comparisonCell.index)
+                    if (!root.comparisonCanvas)
+                        return { "visible": false }
+                    const currentNavigationRevision = root.comparisonCanvas.navigationRevision
+                    return root.comparisonCanvas.navigationState(comparisonCell.index)
                 }
 
                 x: root.controller.presentationMode === 1
-                   ? (comparisonCell.index === 0 ? 0 : comparisonCanvas.dividerPosition)
+                   ? (comparisonCell.index === 0 ? 0 : root.comparisonCanvas.dividerPosition)
                    : root.cellX(comparisonCell.index, stage.width)
                 y: root.cellY(comparisonCell.index, stage.height)
                 width: root.controller.presentationMode === 1
                        ? (comparisonCell.index === 0
-                          ? comparisonCanvas.dividerPosition
-                          : stage.width - comparisonCanvas.dividerPosition)
+                          ? root.comparisonCanvas.dividerPosition
+                          : stage.width - root.comparisonCanvas.dividerPosition)
                        : root.cellWidth(stage.width)
                 height: root.cellHeight(stage.height)
                 visible: root.controller.presentationMode === 0

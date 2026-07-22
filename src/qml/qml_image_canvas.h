@@ -3,7 +3,6 @@
 #include "core/image_types.h"
 #include "core/sync_group.h"
 #include "core/view_state.h"
-#include "render/image_canvas.h"
 
 #include <QQuickRhiItem>
 #include <QVariantMap>
@@ -65,6 +64,7 @@ class QmlImageCanvas : public QQuickRhiItem {
     void navigationRevisionChanged();
     void viewStateChanged(int slot, const ispview::ViewState& state);
     void pixelHovered(int sourceSlot, const QPoint& pixel, const QColor& color, bool valid);
+    void contextMenuRequested(const QPointF& position);
 
   protected:
     QQuickRhiItemRenderer* createRenderer() override;

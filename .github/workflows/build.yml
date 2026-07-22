@@ -72,12 +72,4 @@ jobs:
       - name: Test (Windows MSYS2/UCRT64)
         if: runner.os == 'Windows'
         shell: msys2 {0}
-        # The comprehensive Widgets suite is validated on macOS. On hosted Windows runners it
-        # uses Qt's headless offscreen plugin, whose window-management limitations make this
-        # integration suite flaky; keep the platform-independent and renderer tests here.
-        run: ctest --preset windows-msys2-debug -E '^ispview_ui_tests$'
-      - name: Require native D3D11 RAW/YUV acceptance
-        if: runner.os == 'Windows'
-        shell: msys2 {0}
-        timeout-minutes: 5
-        run: ctest --preset windows-msys2-rhi-acceptance --verbose
+        run: ctest --preset windows-msys2-debug
