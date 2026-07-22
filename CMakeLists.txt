@@ -77,6 +77,15 @@ find_package(Qt6 6.7 REQUIRED COMPONENTS
 )
 find_package(Qt6GuiPrivate 6.7 CONFIG REQUIRED)
 
+# The production QML renderer uses Qt's QRhi API.  Keep this check close to
+# dependency discovery so an incomplete Qt SDK fails during configuration with
+# an actionable error instead of much later while compiling qml_image_canvas.
+if(NOT TARGET Qt6::GuiPrivate)
+    message(FATAL_ERROR
+        "Qt6::GuiPrivate is required by the QML RHI renderer. Install the "
+        "private QtGui development headers for the selected Qt SDK.")
+endif()
+
 if(BUILD_TESTING OR ISPVIEW_BUILD_BENCHMARKS)
     find_package(Qt6 6.7 REQUIRED COMPONENTS Test)
 endif()

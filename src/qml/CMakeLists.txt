@@ -101,6 +101,11 @@ target_link_libraries(ISPImageViewerQml PRIVATE
     ispview_browser_backend
     ispview_render_backend
     ispview_io
+    # QmlImageCanvas implements the QQuickRhiItem renderer directly and uses
+    # QRhi resource types.  Do not rely on another Qt target to leak the
+    # versioned private QtGui include directory: framework builds on macOS may
+    # do that incidentally, while MSYS2/MinGW correctly keeps it private.
+    Qt6::GuiPrivate
     Qt6::Quick
     Qt6::QuickControls2
     Qt6::QuickLayouts
