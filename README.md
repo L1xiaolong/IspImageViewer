@@ -1,108 +1,62 @@
 # ISP Image Viewer
 
-A lightweight cross-platform desktop image browser and synchronized comparison tool. The JPG/PNG
-MVP has been completed and accepted. The project now moves into release-candidate stabilization;
-existing RAW/YUV code is retained but is not the active product-expansion direction.
+[English](README_EN.md) | 简体中文
 
-## Documentation
+<p align="center">
+  <img src="assets/brand/app_icon.png" width="128" alt="ISP Image Viewer 图标">
+</p>
 
-- [Documentation index](docs/README.md)
-- [User manual](docs/user-manual.md)
-- [Current features and roadmap](docs/feature-status-and-roadmap.md)
-- [Architecture](docs/architecture.md)
-- [Development log](docs/development-log.md)
-- [Development handoff](docs/development-handoff.md)
-- [Test checklist](docs/test-checklist.md)
-- [Next-work TODO](docs/todo.md)
+ISP Image Viewer 是一款基于 Qt 6 的轻量级跨平台桌面图片查看与对比工具，面向需要快速浏览、检查像素并同步比较多张图片的用户。
 
-## Implemented features
+项目当前处于 Release Candidate 稳定化阶段。JPEG、PNG 浏览与对比是主要发布范围；无头 RAW/YUV 和相机 RAW 支持作为可选的高级能力保留。
 
-- Explorer-style directory tree, history navigation, current-folder search, file grid, and resizable
-  preview pane; the multi-folder workspace uses independent clickable breadcrumbs
-- Asynchronous JPEG/JPG/PNG scanning, decoding, and thumbnails
-- GPU-backed image canvas using Qt RHI
-- Fit, 100%, cursor-centered zoom, pan, pixel coordinates, and RGBA inspection
-- Full-screen browsing and synchronized 2–4 image comparison
-- FastStone-style four-edge full-screen overlays, plus a context menu for file-manager reveal and
-  pinned in-canvas EXIF or histogram inspection
-- Immersive QML comparison page with a compact top toolbar, per-pane file/EXIF/luma-histogram/pixel
-  overlays, vertical split for two images, relative synchronized views, and press-and-hold B-over-A
-  inspection
-- Embedded 1–4 file-manager workspace; select 2–4 images within or across directories and launch
-  the normal comparison page without creating extra windows
-- Byte-bounded memory caching and persistent thumbnail caching
-- Incremental directory monitoring with a folder-first thumbnail grid, always-visible filenames,
-  and selectable natural-name/date/size/type sorting
-- Drag images or folders out through native file URLs to Finder/Explorer; external drops copy into
-  the current directory without changing navigation
-- System clipboard Copy/Cut/Paste for images and folders, with background transfer, no-overwrite
-  conflict naming, atomic same-volume move, and copy-before-delete cross-volume move
-- Explorer-style file/folder context menus, safe single-item rename, Properties,
-  Finder/Explorer reveal, and system Trash integration
-- Trash is available from the thumbnail context menu and window-level platform shortcuts (macOS
-  Command+Delete/Backspace, Windows Delete), with a confirmation dialog whose warning can be
-  disabled by the user; text editors retain their normal delete behavior
-- Parameterized NV12/NV21/I420/P010 and Bayer RAW10/12/16 decoding with GPU Plane display,
-  including little- and big-endian P010
-- A docked RAW/YUV parameter panel that updates the current preview and thumbnail after a short
-  debounce; headerless data is deliberately interpreted as a single frame
-- Original-value RAW/YUV pixel inspection and per-file sidecar parameters
-- Lossless RAW/YUV display orientation at 0/90/180/270 degrees with immutable source-plane probes
-- RAW white balance, 3×3 color correction matrix, and display gamma preview
-- Dockable asynchronous display RGB/luma histogram with bounded sampling and stale-result rejection
-- Normalized ROI drag selection remains available internally for histogram region analysis, but is
-  intentionally absent from the main toolbar
-- Selectable source-plane Y/U/V or Bayer R/Gr/Gb/B histogram and ROI statistics that preserve
-  original bit depth, packing, stride, byte order, and display orientation mapping
-- Optional LibRaw-backed DNG/camera RAW thumbnails and full previews with typed camera, lens,
-  exposure, aperture, ISO, focal-length, capture-time, and sensor-size metadata
-- Optional Exiv2-backed EXIF/IPTC/XMP metadata for JPEG/PNG, including source Orientation,
-  descriptive fields, typed camera data, and privacy-preserving GPS-presence reporting
-- Optional LittleCMS conversion of embedded RGB ICC profiles in JPEG/PNG to a fixed sRGB display
-  buffer, with profile fingerprint, transform provenance, bounded memory, and Alpha preservation
-- Dockable Properties panel shared by encoded, headerless RAW/YUV, and camera RAW frames
+## 功能亮点
 
-An optional directory may be passed on the command line:
+- 类 Finder/Explorer 的目录树、历史导航、搜索、排序和缩略图浏览
+- 异步目录扫描、图片解码和持久化缩略图缓存
+- 基于 Qt RHI 的 GPU 图片画布
+- Fit、100%、光标中心缩放、平移、坐标与 RGBA 像素检查
+- 全屏浏览，以及 2～4 张图片同步缩放和平移对比
+- 两图水平/垂直滑动分割和按住 B 覆盖 A 检查
+- 每个对比窗格可独立显示文件信息、EXIF、亮度直方图和像素值
+- 1～4 面板多文件夹工作区，可跨目录选择图片进入对比
+- 文件复制、剪切、粘贴、重命名、拖放、系统定位和回收站集成
+- 可选的 RAW/YUV 参数解释、源平面像素检查、直方图和 ROI 统计
+- 可选的相机 RAW、EXIF/IPTC/XMP 元数据和 ICC 到 sRGB 转换
 
-```sh
-ISPImageViewer /path/to/images
-```
+## 支持的格式
 
-## Requirements
+| 类型 | 支持情况 | 说明 |
+|---|---|---|
+| JPEG / JPG | 内置 | 浏览、缩略图、全屏和对比 |
+| PNG | 内置 | 浏览、缩略图、全屏和对比，保留 Alpha |
+| NV12 / NV21 / I420 / P010 | 内置高级功能 | 无头数据，需要提供宽高、步长等参数 |
+| Bayer RAW10 / RAW12 / RAW16 | 内置高级功能 | 支持 CFA、有效位、字节序、黑白电平、白平衡、CCM 和 Gamma 参数 |
+| DNG / 相机 RAW | 可选 | 需要 LibRaw 0.21+ |
+| EXIF / IPTC / XMP | 可选 | JPEG/PNG 元数据读取需要 Exiv2 0.28+ |
+| 嵌入式 RGB ICC | 可选 | 需要 LittleCMS 2.x，转换到 sRGB 显示缓冲区 |
+
+TIFF、WebP、OpenEXR、HEIC/HEIF、AVIF、JPEG XL、PSD、SVG、PDF 和 GIF 当前不在支持范围内。
+
+## 系统与构建要求
 
 - CMake 3.25+
-- C++20 compiler
-- Qt 6.7+ with Quick, Quick Controls 2, ShaderTools, and private Gui headers
-- Optional LibRaw 0.21+ for DNG and camera RAW support
-- Optional Exiv2 0.28+ for JPEG/PNG EXIF, IPTC, and XMP metadata
-- Optional LittleCMS 2.x for embedded RGB ICC conversion
+- 支持 C++20 的编译器
+- Qt 6.7+：Core、Gui、Quick、Quick Controls 2、Quick Layouts、Svg、ShaderTools 及 Gui 私有头文件
+- macOS：Apple Silicon；Qt 6.9.x 为当前验证版本
+- Windows：x64；推荐 MSYS2/UCRT64 + GCC + Ninja
 
-Qt 6.9.x is the validated development version.
+可选依赖：
 
-Camera RAW support is enabled automatically when a usable LibRaw installation is found. Builds
-without LibRaw remain supported and simply omit camera RAW files from the browser. With vcpkg,
-enable the manifest feature `camera-raw`; alternatively install LibRaw through the platform package
-manager. `ISPVIEW_ENABLE_LIBRAW=OFF` explicitly disables the adapter. CMake performs a native macOS
-runtime probe so a stale dynamic library with missing transitive dependencies cannot break the app.
+- LibRaw 0.21+
+- Exiv2 0.28+
+- LittleCMS 2.x
 
-JPEG/PNG metadata support is enabled automatically when Exiv2 is found and can be disabled with
-`ISPVIEW_ENABLE_EXIV2=OFF`. The non-default vcpkg feature is `metadata-exiv2`. Exiv2's current
-vcpkg package is GPL-2.0-or-later, so distributors must review that license before enabling and
-shipping this optional feature. Metadata failures never replace a successful pixel decode, and GPS
-coordinates are intentionally neither retained nor displayed.
+## 构建
 
-Embedded ICC conversion is enabled automatically when LittleCMS is found and can be disabled with
-`ISPVIEW_ENABLE_LCMS2=OFF`; the non-default vcpkg feature is `color-management`. The current slice
-normalizes encoded JPEG/PNG pixels to sRGB before GPU upload. It does not yet transform sRGB into a
-specific monitor profile or provide an HDR swapchain, so it must not be described as complete
-end-to-end display calibration.
+### macOS
 
-TIFF, WebP, OpenEXR, HEIC/HEIF, AVIF, JPEG XL, PSD, SVG, PDF, and GIF are intentionally outside the
-current lightweight MVP. They are not listed by the browser or accepted by the encoded decoder.
-
-## Build on macOS
-
-Recommended wrapper:
+使用项目脚本：
 
 ```sh
 ./build_macos.sh dev --test
@@ -110,25 +64,81 @@ Recommended wrapper:
 ./build_macos.sh package
 ```
 
-`dev` and `release` only write to `build/`; they never replace a distributable. `package` builds
-Release in `build/`, stages and verifies a self-contained app, then writes
-`dist/ISPImageViewer.app` and a versioned ZIP. The default package uses an ad-hoc local signature;
-use `--sign "Developer ID Application: ..."` for a package intended for public distribution.
-`debug` remains an alias for `dev`. Use `./build_macos.sh --help` for `--clean`, `--rhi`, `--no-zip`,
-and `-j N`.
+- `dev`：在 `build/` 中生成 Debug 应用
+- `release`：在 `build/` 中生成 Release 应用
+- `package`：部署运行时依赖，并在 `dist/` 中生成 `.app` 和 ZIP
 
-Equivalent raw CMake commands:
+也可以直接使用 CMake Preset：
 
 ```sh
 cmake --preset macos-debug
 cmake --build --preset macos-debug
-ctest --preset macos-debug
+ctest --preset macos-debug --output-on-failure
 ```
 
-Development bundles are generated under `build/macos-preset-debug/src/qml` or
-`build/macos-preset-release/src/qml`.
+运行 `./build_macos.sh --help` 可查看清理、签名、RHI 验证、并行任务数等选项。
 
-Repeatable CPU decode, histogram, and color-management benchmarks are built by the Release presets:
+### Windows
+
+推荐使用 MSYS2/UCRT64：
+
+```powershell
+$env:MSYS2_UCRT64 = (& qmake -query QT_INSTALL_PREFIX).Trim()
+.\build_windows.ps1 -Toolchain msys2 -Mode dev -Test
+.\build_windows.ps1 -Toolchain msys2 -Mode release
+.\build_windows.ps1 -Toolchain msys2 -Mode package
+```
+
+等效的 CMake Preset 命令：
+
+```powershell
+cmake --preset windows-msys2-debug
+cmake --build --preset windows-msys2-debug
+ctest --preset windows-msys2-debug --output-on-failure
+```
+
+脚本仍保留 `-Toolchain msvc` 作为可选的 Visual Studio 构建路径。
+
+## 可选功能
+
+CMake 在发现依赖时会自动启用对应适配器，也可以显式关闭：
+
+```sh
+cmake --preset macos-debug \
+  -DISPVIEW_ENABLE_LIBRAW=OFF \
+  -DISPVIEW_ENABLE_EXIV2=OFF \
+  -DISPVIEW_ENABLE_LCMS2=OFF
+```
+
+使用 vcpkg 时，可选择以下 manifest feature：
+
+- `camera-raw`
+- `metadata-exiv2`
+- `color-management`
+
+项目的 GitHub Release 构建目前关闭这三个可选组件，只发布基础 JPEG/PNG 功能，以缩小包体并隔离可选依赖的许可证要求。
+
+> **许可证提示：** Exiv2 采用 GPL-2.0-or-later。启用并分发 Exiv2 的构建前，请确认整个分发方案与其许可证兼容。Qt、LibRaw、LittleCMS 及打包产生的传递依赖也各自保留原有许可证。
+
+## 运行
+
+直接启动应用，或在命令行传入一个初始目录：
+
+```sh
+ISPImageViewer /path/to/images
+```
+
+预编译版本发布在 [GitHub Releases](https://github.com/L1xiaolong/IspImageViewer/releases)。当前 macOS 包可能没有 Apple notarization，首次运行时可能需要在 Finder 中右键选择“打开”。
+
+## 测试与性能工具
+
+Debug Preset 会构建自动测试：
+
+```sh
+ctest --preset macos-debug --output-on-failure
+```
+
+Release Preset 可构建 RAW 解码、直方图、颜色管理和大目录浏览 benchmark：
 
 ```sh
 cmake --build --preset macos-release
@@ -136,76 +146,25 @@ cmake --build --preset macos-release
 ./build/macos-preset-release/tools/ispview_histogram_benchmark --48mp
 ./build/macos-preset-release/tools/ispview_color_benchmark --48mp
 ./build/macos-preset-release/tools/ispview_browser_benchmark --enforce
-./build/macos-preset-release/tools/ispview_sample_check --allow-incomplete test_images
-./build/macos-preset-release/tools/ispview_sample_check --allow-incomplete \
-  --candidate-raw16 6236x4178:14:RGGB --orientation 180 test_images
 ```
 
-The GPU benchmark requires a native display session and fails if RAW/YUV rendering falls back to CPU RGBA.
-The UI benchmark additionally opens the real `MainWindow`, drives sequential thumbnail navigation,
-and measures the first visible image and Full plane submissions. After timing, it sends a native
-mouse ROI drag and requires normalized ROI state, a visible overlay, and converged region statistics;
-it then switches to source-plane mode and requires the YUV ROI statistics to converge. Placing these
-checks after timing prevents them from warming navigation prefetch. Its `--encoded-directory` mode
-drives sequential thumbnail navigation using real JPEG/PNG files. Its `--raw-directory` mode copies
-RAW samples into a temporary directory, writes temporary sidecars from `--candidate-raw16`, and
-requires Preview, Bayer GPU Full, logical source size, bounded fallback, and status-bar pixel probe.
-It does not modify the source samples or persistent user settings. It also fails on CPU fallback.
-`ispview_sample_check` validates local real-world samples through the production decoder registry;
-it reports unsupported formats and unconfigured headerless files separately from decoder failures.
-The optional `--candidate-raw16 WIDTHxHEIGHT:VALID_BITS:CFA` interpretation is process-local and
-does not write sidecars or settings; add `--msb-aligned`, `--big-endian`, or
-`--orientation 0|90|180|270` when required. Orientation is applied only to the process-local RAW
-candidate. It changes display geometry and rendering while probes continue to read the mapped
-source pixel from the immutable Plane.
-Local `test_images` data is intentionally ignored by Git.
+需要真实图片的测试数据应保存在本地，不应提交包含个人信息、精确位置或来源不明的素材。
 
-`ispview_browser_benchmark` creates a temporary 10,000-visible-entry directory with 3,000 JPEGs
-plus hidden files and hidden directory trees. It reports first-batch, complete-scan, first-thumbnail,
-first-viewport, and peak-resident-memory metrics as JSON. `--quick` uses one tenth of the fixture;
-`--enforce` applies the release performance gates documented by the project. Fixture preparation is
-excluded from all timings and the temporary directory is removed automatically.
+## 项目结构
 
-## Build on Windows
-
-The supported local validation path is MSYS2/UCRT64 GCC + Ninja:
-
-```pwsh
-$env:MSYS2_UCRT64 = (& qmake -query QT_INSTALL_PREFIX).Trim()
-.\build_windows.ps1 -Toolchain msys2 -Mode dev -Test
-.\build_windows.ps1 -Toolchain msys2 -Mode release
-.\build_windows.ps1 -Toolchain msys2 -Mode package
+```text
+src/core       核心数据结构、缓存、直方图和同步状态
+src/io         解码器、元数据、颜色管理和文件操作
+src/render     RHI 渲染参数与 Shader
+src/browser    目录、缩略图、拖放与剪贴板模型
+src/platform   macOS/Windows 平台服务与快捷键
+src/qml        应用入口、控制器和 QML 界面
+tests          C++ 与 QML 自动测试
+tools          性能测试和诊断工具
 ```
 
-The wrapper configures and builds a Ninja tree under `build/windows-msys2-debug` or
-`build/windows-msys2-release`. `dev` and `release` leave `dist/` untouched. `package` runs
-`windeployqt`, recursively copies non-system MSYS2 DLL dependencies, and writes a versioned ZIP
-under `dist/`. Use `.\build_windows.ps1 -Help` for `-Clean`, `-NoZip`, `-Jobs N`,
-`-Msys2Ucrt64`, and the legacy `-Toolchain msvc` option.
+## 许可证
 
-Equivalent raw CMake commands:
+项目级开源许可证正在整理中。在根目录加入正式 `LICENSE` 文件之前，本仓库内容仍受默认版权保护，不代表已经授予复制、修改或再分发权。
 
-```pwsh
-cmake --preset windows-msys2-debug
-cmake --build --preset windows-msys2-debug
-ctest --preset windows-msys2-debug --output-on-failure
-```
-
-The single-configuration Ninja build writes the application to
-`build/windows-msys2-debug/ISPImageViewer.exe`. The Release preset enables benchmark tools.
-
-For MSYS2 package installation, QML test policy, optional LibRaw/Exiv2 validation, and
-the latest Windows evidence, see [docs/windows-msys2-validation.md](docs/windows-msys2-validation.md).
-
-The legacy Visual Studio presets remain available when explicitly requested:
-
-```pwsh
-.\build_windows.ps1 -Toolchain msvc -Mode debug -Test
-```
-
-## Architecture
-
-See [docs/architecture.md](docs/architecture.md).
-
-For the current implementation status, validation evidence, known issues, and exact handoff point,
-read [docs/development-handoff.md](docs/development-handoff.md) before continuing development.
+第三方组件不受未来项目许可证覆盖，分发者需要分别遵守 Qt、Exiv2、LibRaw、LittleCMS 及其传递依赖的许可证。

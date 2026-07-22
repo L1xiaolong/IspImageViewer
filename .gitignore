@@ -1,8 +1,10 @@
 /build*/
 /out/
+/docs/
+/dist/
+/test_images*/
 /vcpkg_installed/
 /CMakeUserPresets.json
 .DS_Store
 *.user
 *.swp
-/dist
