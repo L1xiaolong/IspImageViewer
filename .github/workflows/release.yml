@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing v* tag to package and publish
+        description: v* release tag to create or update
         required: true
         type: string
 
@@ -18,12 +18,26 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
+  validate:
+    name: Validate release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate release tag
+        shell: bash
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: $RELEASE_TAG" >&2
+            echo "Expected a version such as v0.2.4 or v0.2.4-rc.1" >&2
+            exit 1
+          fi
+
   package:
     name: Package (${{ matrix.name }})
+    needs: validate
     strategy:
       fail-fast: false
       matrix:
@@ -36,9 +50,11 @@ jobs:
             asset_suffix: windows-x64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.tag || github.ref }}
+      # The event SHA is already the tag commit for a tag push, or the exact
+      # branch commit selected in the workflow_dispatch UI.  Do not use the
+      # requested release name as a checkout ref: manual releases are allowed
+      # to create a new tag only after every package succeeds.
+      - uses: actions/checkout@v7
 
       - uses: jurplel/install-qt-action@v4
         if: runner.os == 'macOS'
@@ -125,7 +141,7 @@ jobs:
           )
 
       - name: Upload release asset
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ISPImageViewer-${{ matrix.asset_suffix }}
           path: dist/*.zip
@@ -137,7 +153,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download packages
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: release-assets
           merge-multiple: true
@@ -153,6 +169,7 @@ jobs:
           else
             gh release create "$RELEASE_TAG" release-assets/*.zip \
               --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
               --title "ISP Image Viewer $RELEASE_TAG" \
               --generate-notes
           fi
