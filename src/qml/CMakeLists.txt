@@ -96,6 +96,17 @@ qt_add_resources(ISPImageViewerQml "ispview_qml_icons"
     FILES ${_ispview_qml_icons}
 )
 
+set(_ispview_fonts
+    ${PROJECT_SOURCE_DIR}/assets/fonts/Inter-Regular.ttf
+    ${PROJECT_SOURCE_DIR}/assets/fonts/Inter-Bold.ttf
+    ${PROJECT_SOURCE_DIR}/assets/fonts/JetBrainsMono-Regular.ttf
+)
+qt_add_resources(ISPImageViewerQml "ispview_fonts"
+    PREFIX "/fonts"
+    BASE "${PROJECT_SOURCE_DIR}/assets/fonts"
+    FILES ${_ispview_fonts}
+)
+
 target_include_directories(ISPImageViewerQml PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(ISPImageViewerQml PRIVATE
     ispview_browser_backend

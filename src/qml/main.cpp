@@ -9,6 +9,8 @@
 
 #include <QCoreApplication>
 #include <QFileInfo>
+#include <QFont>
+#include <QFontDatabase>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -24,6 +26,14 @@ int main(int argc, char* argv[]) {
     QCoreApplication::setOrganizationName(QStringLiteral("ISPView"));
     QCoreApplication::setApplicationVersion(QStringLiteral("0.2.3"));
     QQuickStyle::setStyle(QStringLiteral("Basic"));
+
+    QFont defaultFont = app.font();
+    defaultFont.setWeight(QFont::Medium);
+    app.setFont(defaultFont);
+
+    QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/Inter-Regular.ttf"));
+    QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/Inter-Bold.ttf"));
+    QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/JetBrainsMono-Regular.ttf"));
 
     QString initialDirectory;
     QString screenshotPath;

@@ -1218,7 +1218,7 @@ Rectangle {
                   ? galleryWorkspace.pixelProbeText : root.workspaceController.statusText
             color: Theme.mutedInk
             font.family: Theme.monoFont
-            font.pixelSize: 11
+            font.pixelSize: 12
         }
     }
 

@@ -1,6 +1,6 @@
 {
   "name": "isp-image-viewer",
-  "version-string": "0.1.0",
+  "version-string": "0.2.4",
   "description": "Lightweight cross-platform image browser and comparison tool",
   "dependencies": [],
   "features": {

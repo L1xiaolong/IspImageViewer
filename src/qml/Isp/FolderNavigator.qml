@@ -54,7 +54,8 @@ Rectangle {
                     text: "RECENT"
                     color: Theme.mutedInk
                     font.family: Theme.monoFont
-                    font.pixelSize: 11
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
                     leftPadding: 6
                     topPadding: 8
                     bottomPadding: 4
@@ -83,6 +84,7 @@ Rectangle {
                             color: Theme.graphiteInk
                             font.family: Theme.uiFont
                             font.pixelSize: 12
+                            font.weight: Font.DemiBold
                         }
                         MouseArea {
                             id: recentMouse
@@ -98,7 +100,8 @@ Rectangle {
             text: "PROJECT TREE"
             color: Theme.mutedInk
             font.family: Theme.monoFont
-            font.pixelSize: 11
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
             leftPadding: 6
             topPadding: 8
             bottomPadding: 2
@@ -156,6 +159,7 @@ Rectangle {
                             color: Theme.graphiteInk
                             font.family: Theme.uiFont
                             font.pixelSize: 12
+                            font.weight: Font.DemiBold
                         }
                         MouseArea {
                             id: treeMouse
