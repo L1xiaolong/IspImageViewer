@@ -234,7 +234,7 @@ Item {
                 enabled: root.paths.length === 2 && root.controller.presentationMode === 0
                 checkable: true
                 checked: root.controller.holdCandidate
-                iconSource: "qrc:/icons/ui/compare.svg"
+                iconSource: "qrc:/icons/ui/cover.svg"
                 toolTipText: "Hold B to inspect the candidate"
                 onPressed: root.controller.setHoldCandidate(true)
                 onReleased: root.controller.setHoldCandidate(false)

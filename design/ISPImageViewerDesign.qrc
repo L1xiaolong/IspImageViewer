@@ -1,11 +1,8 @@
 <RCC>
     <qresource>
         <file>../assets/icons/ui/back.svg</file>
-        <file>../assets/icons/ui/chevron-down.svg</file>
-        <file>../assets/icons/ui/columns.svg</file>
         <file>../assets/icons/ui/compare.svg</file>
-        <file>../assets/icons/ui/copy.svg</file>
-        <file>../assets/icons/ui/cut.svg</file>
+        <file>../assets/icons/ui/cover.svg</file>
         <file>../assets/icons/ui/folder-open.svg</file>
         <file>../assets/icons/ui/folder-plus.svg</file>
         <file>../assets/icons/ui/folder-pane-plus.svg</file>
@@ -16,16 +13,8 @@
         <file>../assets/icons/ui/grid.svg</file>
         <file>../assets/icons/ui/info.svg</file>
         <file>../assets/icons/ui/list.svg</file>
-        <file>../assets/icons/ui/more.svg</file>
-        <file>../assets/icons/ui/multi-source.svg</file>
-        <file>../assets/icons/ui/paste.svg</file>
-        <file>../assets/icons/ui/plus.svg</file>
         <file>../assets/icons/ui/search.svg</file>
         <file>../assets/icons/ui/sort.svg</file>
-        <file>../assets/icons/ui/sliders.svg</file>
-        <file>../assets/icons/ui/star.svg</file>
-        <file>../assets/icons/ui/trash.svg</file>
-        <file>../assets/icons/ui/up.svg</file>
         <file>App.qml</file>
         <file>DesignPreview.ui.qml</file>
         <file>ISPImageViewerDesign.qmlproject</file>

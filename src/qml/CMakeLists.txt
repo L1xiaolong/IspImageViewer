@@ -57,7 +57,6 @@ qt_add_qml_module(ISPImageViewerQml
 set(_ispview_qml_icons
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/back.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/forward.svg
-    ${PROJECT_SOURCE_DIR}/assets/icons/ui/up.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/folder.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/folder-open.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/folder-plus.svg
@@ -65,22 +64,12 @@ set(_ispview_qml_icons
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/close.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/search.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/sort.svg
-    ${PROJECT_SOURCE_DIR}/assets/icons/ui/copy.svg
-    ${PROJECT_SOURCE_DIR}/assets/icons/ui/cut.svg
-    ${PROJECT_SOURCE_DIR}/assets/icons/ui/paste.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/compare.svg
-    ${PROJECT_SOURCE_DIR}/assets/icons/ui/multi-source.svg
+    ${PROJECT_SOURCE_DIR}/assets/icons/ui/cover.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/grid.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/list.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/gallery.svg
-    ${PROJECT_SOURCE_DIR}/assets/icons/ui/columns.svg
-    ${PROJECT_SOURCE_DIR}/assets/icons/ui/chevron-down.svg
-    ${PROJECT_SOURCE_DIR}/assets/icons/ui/plus.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/info.svg
-    ${PROJECT_SOURCE_DIR}/assets/icons/ui/sliders.svg
-    ${PROJECT_SOURCE_DIR}/assets/icons/ui/star.svg
-    ${PROJECT_SOURCE_DIR}/assets/icons/ui/trash.svg
-    ${PROJECT_SOURCE_DIR}/assets/icons/ui/more.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/actual-size.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/side-by-side.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/split-vertical.svg

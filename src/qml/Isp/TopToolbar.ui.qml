@@ -81,17 +81,16 @@ Rectangle {
         objectName: "folderCompareButton"
         x: brandDivider.x + 90
         y: 8
-        width: 56
+        width: 36
         height: 36
         enabled: root.canAddPane
         iconSource: root.iconPrefix + "folder-pane-plus.svg"
-        text: "+1"
-        toolTipText: enabled ? "Add file manager (+1)" : "Maximum 4 file managers"
+        toolTipText: enabled ? "Add file manager" : "Maximum 4 file managers"
     }
 
     Rectangle {
         id: fileDivider
-        x: brandDivider.x + 156
+        x: brandDivider.x + 140
         y: 14
         width: 1
         height: 24
@@ -101,7 +100,7 @@ Rectangle {
     AppIconButton {
         id: gridModeButton
         objectName: "gridModeButton"
-        x: brandDivider.x + 170
+        x: brandDivider.x + 154
         y: 8
         width: 36
         height: 36
@@ -115,7 +114,7 @@ Rectangle {
     AppIconButton {
         id: listModeButton
         objectName: "listModeButton"
-        x: brandDivider.x + 208
+        x: brandDivider.x + 192
         y: 8
         width: 36
         height: 36
@@ -129,7 +128,7 @@ Rectangle {
     AppIconButton {
         id: galleryModeButton
         objectName: "galleryModeButton"
-        x: brandDivider.x + 246
+        x: brandDivider.x + 230
         y: 8
         width: 36
         height: 36
@@ -143,7 +142,7 @@ Rectangle {
     Rectangle {
         id: activeViewRail
         visible: root.activePaneAvailable && root.activeDirectoryAvailable
-        x: root.displayMode === 0 ? brandDivider.x + 180 : root.displayMode === 1 ? brandDivider.x + 218 : brandDivider.x + 256
+        x: root.displayMode === 0 ? brandDivider.x + 164 : root.displayMode === 1 ? brandDivider.x + 202 : brandDivider.x + 240
         y: 47
         width: 16
         height: 2
@@ -159,7 +158,7 @@ Rectangle {
 
     Rectangle {
         id: viewDivider
-        x: brandDivider.x + 292
+        x: brandDivider.x + 276
         y: 14
         width: 1
         height: 24
@@ -169,7 +168,7 @@ Rectangle {
     AppIconButton {
         id: sortButton
         objectName: "sortButton"
-        x: brandDivider.x + 306
+        x: brandDivider.x + 290
         y: 8
         width: 36
         height: 36
@@ -182,7 +181,7 @@ Rectangle {
     AppIconButton {
         id: compareButton
         objectName: "compareButton"
-        x: brandDivider.x + 344
+        x: brandDivider.x + 328
         y: 8
         width: 36
         height: 36
