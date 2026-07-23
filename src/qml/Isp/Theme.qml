@@ -12,6 +12,11 @@ QtObject {
     readonly property color exposureAmber: "#B87524"
     readonly property color danger: "#C94E4E"
 
+    // VS Code-style file tree
+    readonly property color explorerSelectionBg: "#E4E6F1"
+    readonly property color explorerHoverBg: "#EDF0F0"
+    readonly property color explorerIndentGuide: "#D5D9DC"
+
     readonly property int unit: 4
     readonly property int toolbarHeight: 52
     readonly property int sidebarWidth: 272

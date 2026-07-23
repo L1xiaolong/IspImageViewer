@@ -98,6 +98,7 @@ class BrowseController final : public QObject {
     Q_INVOKABLE void navigateForward();
     Q_INVOKABLE void navigateUp();
     Q_INVOKABLE void activatePath(const QString& path);
+    Q_INVOKABLE void activateTreeItem(const QString& path);
     Q_INVOKABLE void selectPath(const QString& path, bool extend = false, bool toggle = false);
     Q_INVOKABLE void clearSelection();
     Q_INVOKABLE void setFilterText(const QString& text);
@@ -178,6 +179,7 @@ class BrowseController final : public QObject {
     bool incrementalScan_ = false;
     quint64 galleryRequestId_ = 0;
     int gridCellWidth_ = 196;
+    QString pendingActivationPath_;
     int displayMode_ = 0;
     QString galleryPath_;
     QString selectionAnchorPath_;

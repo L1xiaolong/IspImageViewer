@@ -3,6 +3,7 @@
 /docs/
 /dist/
 /test_images*/
+/.vscode/
 /vcpkg_installed/
 /CMakeUserPresets.json
 .DS_Store

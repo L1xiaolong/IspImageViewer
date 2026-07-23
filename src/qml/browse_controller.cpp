@@ -6,6 +6,7 @@
 #include "io/image_loader.h"
 #include "io/raw_preset_store.h"
 #include "io/single_file_rename.h"
+#include "io/supported_image_formats.h"
 #include "platform/platform_services.h"
 #include "browser/file_clipboard.h"
 #include "browser/thumbnail_model.h"
@@ -53,8 +54,9 @@ void BrowseController::initialize(const QString& initialDirectory, bool startEmp
     refreshDeadlineTimer_ = new QTimer(this);
     recentCandidateTimer_ = new QTimer(this);
     filterModel_->setSourceModel(thumbnailModel_);
-    fileSystemModel_->setFilter(QDir::Dirs | QDir::Readable | QDir::NoDotAndDotDot |
-                                QDir::NoSymLinks | QDir::Drives);
+    fileSystemModel_->setFilter(QDir::Dirs | QDir::Files | QDir::Readable |
+                                QDir::NoDotAndDotDot | QDir::NoSymLinks | QDir::Drives);
+    fileSystemModel_->setNameFilters(supportedImageNameFilters());
 #ifdef Q_OS_WIN
     // Invalid root index exposes all native drive roots on Windows.
     fileSystemModel_->setRootPath(QString{});
@@ -113,6 +115,15 @@ void BrowseController::initialize(const QString& initialDirectory, bool startEmp
                 setStatusText(QStringLiteral("%1 items · %2 selected")
                                   .arg(files.size())
                                   .arg(selectedPaths_.size()));
+
+                if (!pendingActivationPath_.isEmpty()) {
+                    const QString pending = pendingActivationPath_;
+                    pendingActivationPath_.clear();
+                    if (QFileInfo(pending).absolutePath() == currentDirectory_) {
+                        updateSelection({pending});
+                        openSelected();
+                    }
+                }
 
                 const bool directlyContainsImages =
                     std::any_of(files.cbegin(), files.cend(),
@@ -296,6 +307,24 @@ void BrowseController::navigateUp() {
 void BrowseController::activatePath(const QString& path) {
     if (QFileInfo(path).isDir()) {
         openDirectoryInternal(path, true);
+        return;
+    }
+    updateSelection({path});
+    openSelected();
+}
+
+void BrowseController::activateTreeItem(const QString& path) {
+    if (path.isEmpty()) return;
+    if (QFileInfo(path).isDir()) {
+        openDirectoryInternal(path, true);
+        return;
+    }
+    // If the file's parent directory differs from the current directory,
+    // navigate there first, then the scan-finished handler will activate the file.
+    const QString parentDir = QFileInfo(path).absolutePath();
+    if (parentDir != currentDirectory_) {
+        pendingActivationPath_ = path;
+        openDirectoryInternal(parentDir, true);
         return;
     }
     updateSelection({path});
