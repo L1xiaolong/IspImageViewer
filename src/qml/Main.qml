@@ -16,14 +16,15 @@ ApplicationWindow {
     property bool showingCompare: false
     property bool showingFullScreen: false
     property bool forceApplicationClose: false
-    property int previousVisibility: Window.Windowed
 
     function openFullScreen(paths, initialIndex) {
-        previousVisibility = visibility
         showingCompare = false
         showingFullScreen = true
+        // Keep the main window's native state untouched. A separate full-screen window avoids
+        // the Maximize <-> FullScreen transition that makes the QML scene and image canvas
+        // resize twice on Windows.
+        fullScreenWindow.showFullScreen()
         fullScreenPage.open(paths, initialIndex)
-        showFullScreen()
     }
 
     function closeCompare() {
@@ -37,13 +38,12 @@ ApplicationWindow {
     function closeFullScreen() {
         if (!showingFullScreen)
             return
+
+        // The main window never changed state, so closing the viewer is just a hide operation.
+        // This keeps the maximized main page at one stable size and eliminates the final resize
+        // frame as well.
+        fullScreenWindow.hide()
         showingFullScreen = false
-        if (previousVisibility === Window.Maximized)
-            showMaximized()
-        else if (previousVisibility === Window.FullScreen)
-            showFullScreen()
-        else
-            showNormal()
         browseController.refreshAll()
         Qt.callLater(function() { browsePage.forceActiveFocus() })
     }
@@ -94,13 +94,27 @@ ApplicationWindow {
         visible: window.showingCompare && !window.showingFullScreen
         onCloseRequested: window.closeCompare()
     }
-    FullScreenPage {
-        id: fullScreenPage
-        controller: fullScreenController
-        propertiesController: imagePropertiesController
-        anchors.fill: parent
-        visible: window.showingFullScreen
-        onCloseRequested: window.closeFullScreen()
+
+    Window {
+        id: fullScreenWindow
+        objectName: "qmlFullScreenWindow"
+        visible: false
+        color: "#A0A0A0"
+        flags: Qt.Window | Qt.FramelessWindowHint
+        transientParent: window
+
+        FullScreenPage {
+            id: fullScreenPage
+            controller: fullScreenController
+            propertiesController: imagePropertiesController
+            anchors.fill: parent
+            onCloseRequested: window.closeFullScreen()
+        }
+
+        onClosing: function(close) {
+            close.accepted = false
+            window.closeFullScreen()
+        }
     }
     Connections {
         target: fullScreenController
