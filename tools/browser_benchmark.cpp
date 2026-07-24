@@ -17,8 +17,8 @@
 #include <QTimer>
 
 #if defined(Q_OS_WIN)
-#include <psapi.h>
 #include <windows.h>
+#include <psapi.h>
 #else
 #include <sys/resource.h>
 #endif
