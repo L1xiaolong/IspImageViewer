@@ -17,6 +17,7 @@
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
+#include <QSettings>
 #include <QTimer>
 #include <QUrl>
 
@@ -26,6 +27,9 @@ int main(int argc, char* argv[]) {
     QCoreApplication::setOrganizationName(QStringLiteral("ISPView"));
     QCoreApplication::setApplicationVersion(QStringLiteral("0.2.3"));
     QQuickStyle::setStyle(QStringLiteral("Basic"));
+    QSettings settings;
+    bool lastMainWindowStateWasMaximized =
+        settings.value(QStringLiteral("window/maximized"), false).toBool();
 
     QFont defaultFont = app.font();
     defaultFont.setWeight(QFont::Medium);
@@ -104,6 +108,31 @@ int main(int argc, char* argv[]) {
     if (engine.rootObjects().isEmpty()) {
         return 1;
     }
+    auto* mainWindow = qobject_cast<QQuickWindow*>(engine.rootObjects().constFirst());
+    if (!mainWindow) {
+        return 1;
+    }
+    if (lastMainWindowStateWasMaximized) {
+        mainWindow->showMaximized();
+    } else {
+        mainWindow->showNormal();
+    }
+    // Minimized and hidden are transient states. Remember the most recent stable state so closing
+    // from the taskbar still restores to normal/maximized instead of starting minimized.
+    QObject::connect(
+        mainWindow, &QWindow::visibilityChanged, &app,
+        [&lastMainWindowStateWasMaximized](QWindow::Visibility visibility) {
+            if (visibility == QWindow::Maximized) {
+                lastMainWindowStateWasMaximized = true;
+            } else if (visibility == QWindow::Windowed) {
+                lastMainWindowStateWasMaximized = false;
+            }
+        });
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &app,
+                     [&lastMainWindowStateWasMaximized] {
+                         QSettings().setValue(QStringLiteral("window/maximized"),
+                                              lastMainWindowStateWasMaximized);
+                     });
     QTimer::singleShot(250, &browseController,
                        [&browseController] { browseController.startDeferredInitialDirectory(); });
 

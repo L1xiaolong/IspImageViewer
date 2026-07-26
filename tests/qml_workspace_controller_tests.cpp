@@ -446,6 +446,8 @@ void QmlWorkspaceControllerTests::fullScreenSessionKeepsNavigationAndFileOperati
     QSignalSpy filesystemSpy(&controller, &FullScreenController::filesystemChanged);
     controller.open({first, second}, 0);
     QCOMPARE(controller.currentPath(), first);
+    QCOMPARE(controller.fileType(), QStringLiteral("PNG"));
+    QVERIFY(!controller.fileSizeText().isEmpty());
     QVERIFY(!controller.canGoPrevious());
     QVERIFY(controller.canGoNext());
     controller.showNext();

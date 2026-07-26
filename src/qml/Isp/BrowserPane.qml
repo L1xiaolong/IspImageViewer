@@ -11,6 +11,7 @@ Rectangle {
     required property var workspaceController
     required property int paneIndex
     property bool active: workspaceController.activePaneIndex === paneIndex
+    property bool contentInteractionEnabled: true
     property string iconPrefix: "qrc:/icons/ui/"
     property int displayMode: controller.displayMode
     signal newFolderRequested
@@ -220,9 +221,14 @@ Rectangle {
         cellWidth: root.displayMode === 1 ? width : visualCellWidth + 12
         cellHeight: root.displayMode === 1 ? 76 : Math.round(visualCellWidth * 0.75) + 74
         boundsBehavior: Flickable.StopAtBounds
+        interactive: root.contentInteractionEnabled
         reuseItems: true
         cacheBuffer: Math.max(0, height)
         keyNavigationEnabled: root.active
+        onInteractiveChanged: {
+            if (!interactive)
+                cancelFlick()
+        }
         delegate: Item {
             required property string path
             required property string fileName
@@ -272,6 +278,7 @@ Rectangle {
 
         MouseArea {
             anchors.fill: parent
+            enabled: root.contentInteractionEnabled
             acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.BackButton | Qt.ForwardButton
             propagateComposedEvents: true
             onClicked: function(mouse) {

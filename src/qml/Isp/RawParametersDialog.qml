@@ -14,6 +14,8 @@ Dialog {
     property bool saveAndApply: false
     property string noticeText: ""
     property bool noticeError: false
+    property real dragOriginX: 0
+    property real dragOriginY: 0
 
     readonly property var formatNames: ["NV12", "NV21", "I420", "P010",
         "MIPI RAW10", "MIPI RAW12", "RAW in 16-bit container"]
@@ -67,11 +69,33 @@ Dialog {
     contentItem: Item {
         Rectangle {
             id: header
+            objectName: "rawParametersDragHeader"
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
             height: 60
             color: "transparent"
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                preventStealing: true
+                property point pressPosition: Qt.point(0, 0)
+                onPressed: function(mouse) {
+                    root.dragOriginX = root.x
+                    root.dragOriginY = root.y
+                    pressPosition = mapToItem(root.parent, mouse.x, mouse.y)
+                    mouse.accepted = true
+                }
+                onPositionChanged: function(mouse) {
+                    if (!pressed || !root.parent)
+                        return
+                    const current = mapToItem(root.parent, mouse.x, mouse.y)
+                    root.x = Math.max(0, Math.min(root.parent.width - root.width,
+                                                 root.dragOriginX + current.x - pressPosition.x))
+                    root.y = Math.max(0, Math.min(root.parent.height - root.height,
+                                                 root.dragOriginY + current.y - pressPosition.y))
+                }
+            }
             Text {
                 anchors.left: parent.left
                 anchors.leftMargin: 16
@@ -374,13 +398,6 @@ Dialog {
                         if (error.length > 0) root.showNotice(error, true)
                     }
                 }
-            }
-            Button {
-                anchors.right: parent.right
-                anchors.rightMargin: 12
-                anchors.verticalCenter: parent.verticalCenter
-                width: 70; height: 28; text: "Close"
-                onClicked: root.close()
             }
         }
     }

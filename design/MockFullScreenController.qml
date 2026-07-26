@@ -15,6 +15,8 @@ QtObject {
     property int currentIndex: 0
     readonly property string currentPath: paths.length > 0 ? paths[currentIndex] : ""
     readonly property string fileName: currentPath.split(/[\\/]/).pop()
+    readonly property string fileType: "JPEG"
+    readonly property string fileSizeText: "13.9 MiB"
     readonly property string positionText: paths.length > 0
                                            ? (currentIndex + 1) + " / " + paths.length : ""
     readonly property bool canGoPrevious: currentIndex > 0

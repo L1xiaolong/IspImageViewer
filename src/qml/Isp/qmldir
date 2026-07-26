@@ -11,7 +11,6 @@ CompareLumaHistogram 1.0 CompareLumaHistogram.qml
 DesignCompareCanvas 1.0 DesignCompareCanvas.qml
 DesignFullScreenCanvas 1.0 DesignFullScreenCanvas.qml
 FolderNavigator 1.0 FolderNavigator.qml
-FullScreenPropertiesCard 1.0 FullScreenPropertiesCard.qml
 ImagePropertiesDialog 1.0 ImagePropertiesDialog.qml
 PropertiesHistogram 1.0 PropertiesHistogram.qml
 PropertyFieldList 1.0 PropertyFieldList.qml

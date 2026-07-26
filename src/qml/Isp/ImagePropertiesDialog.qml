@@ -11,6 +11,8 @@ Dialog {
     property var controller: null
     property string iconPrefix: "qrc:/icons/ui/"
     property int currentTab: 0
+    property real dragOriginX: 0
+    property real dragOriginY: 0
     readonly property var tabs: controller && controller.hasRawParameters
                                 ? ["EXIF", "Histogram", "RAW parameters"]
                                 : ["EXIF", "Histogram"]
@@ -43,12 +45,34 @@ Dialog {
     contentItem: Item {
         Rectangle {
             id: header
+            objectName: "imagePropertiesDragHeader"
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
             height: 60
             color: "transparent"
 
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                preventStealing: true
+                property point pressPosition: Qt.point(0, 0)
+                onPressed: function(mouse) {
+                    root.dragOriginX = root.x
+                    root.dragOriginY = root.y
+                    pressPosition = mapToItem(root.parent, mouse.x, mouse.y)
+                    mouse.accepted = true
+                }
+                onPositionChanged: function(mouse) {
+                    if (!pressed || !root.parent)
+                        return
+                    const current = mapToItem(root.parent, mouse.x, mouse.y)
+                    root.x = Math.max(0, Math.min(root.parent.width - root.width,
+                                                 root.dragOriginX + current.x - pressPosition.x))
+                    root.y = Math.max(0, Math.min(root.parent.height - root.height,
+                                                 root.dragOriginY + current.y - pressPosition.y))
+                }
+            }
             Text {
                 anchors.left: parent.left
                 anchors.leftMargin: 16
@@ -102,7 +126,7 @@ Dialog {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: header.bottom
-            anchors.bottom: footer.top
+            anchors.bottom: parent.bottom
             anchors.margins: 0
             clip: true
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
@@ -169,6 +193,7 @@ Dialog {
                                 id: tabButton
                                 required property int index
                                 required property string modelData
+                                objectName: "imagePropertiesTab-" + index
                                 height: 28
                                 width: Math.max(72, tabLabel.implicitWidth + 20)
                                 text: modelData
@@ -245,45 +270,5 @@ Dialog {
             }
         }
 
-        Rectangle {
-            id: footer
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            height: 46
-            color: "#F8F9F8"
-            Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                height: 1
-                color: Theme.opticalGray
-            }
-            Button {
-                id: footerCloseButton
-                anchors.right: parent.right
-                anchors.rightMargin: 12
-                anchors.verticalCenter: parent.verticalCenter
-                width: 72
-                height: 28
-                text: "Close"
-                onClicked: root.close()
-                contentItem: Text {
-                    text: footerCloseButton.text
-                    color: Theme.graphiteInk
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    font.family: Theme.uiFont
-                    font.pixelSize: 11
-                    font.weight: Font.Medium
-                }
-                background: Rectangle {
-                    radius: 5
-                    color: footerCloseButton.down ? "#E2E9ED" : footerCloseButton.hovered ? "#F0F3F4" : Theme.paperWhite
-                    border.width: 1
-                    border.color: Theme.opticalGray
-                }
-            }
-        }
     }
 }

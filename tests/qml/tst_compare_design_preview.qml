@@ -55,17 +55,16 @@ TestCase {
         page.screenshotFinished.disconnect(recordResult)
     }
 
-    function test_escapeAndCloseButtonRequestPageExit() {
+    function test_escapeIsTheOnlyComparisonPageExitControl() {
         const page = findChild(preview, "comparePage")
         const closeButton = findChild(preview, "closeComparisonButton")
+        compare(closeButton, null)
         let closeCount = 0
         function countClose() { closeCount += 1 }
         page.closeRequested.connect(countClose)
-        mouseClick(closeButton, closeButton.width / 2, closeButton.height / 2, Qt.LeftButton)
-        compare(closeCount, 1)
         page.forceActiveFocus()
         keyClick(Qt.Key_Escape)
-        compare(closeCount, 2)
+        compare(closeCount, 1)
         page.closeRequested.disconnect(countClose)
     }
 }

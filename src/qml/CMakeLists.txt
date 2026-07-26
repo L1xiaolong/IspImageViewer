@@ -38,7 +38,6 @@ qt_add_qml_module(ISPImageViewerQml
         Isp/DesignCompareCanvas.qml
         Isp/DesignFullScreenCanvas.qml
         Isp/FolderNavigator.qml
-        Isp/FullScreenPropertiesCard.qml
         Isp/ImagePropertiesDialog.qml
         Isp/PropertiesHistogram.qml
         Isp/PropertyFieldList.qml

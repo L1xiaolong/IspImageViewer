@@ -105,4 +105,52 @@ TestCase {
         verify(trashDialog.message.indexOf("selected item") >= 0);
         trashDialog.close();
     }
+
+    function test_propertiesAndRawCardsCanBeDraggedByTheirHeaders() {
+        const propertiesDialog = findChild(browsePage, "imagePropertiesDialog")
+        const propertiesHeader = findChild(propertiesDialog, "imagePropertiesDragHeader")
+        const contactSheet = findChild(browsePage, "paneContactSheet-0")
+        const galleryStrip = findChild(browsePage, "galleryStrip")
+        verify(propertiesDialog !== null)
+        verify(propertiesHeader !== null)
+        verify(contactSheet !== null)
+        verify(galleryStrip !== null)
+        compare(contactSheet.interactive, true)
+        compare(galleryStrip.interactive, true)
+        propertiesDialog.openForPath(mockController.thumbnails.get(0).path)
+        tryCompare(propertiesDialog, "opened", true)
+        compare(contactSheet.interactive, false)
+        compare(galleryStrip.interactive, false)
+        const contactSheetY = contactSheet.contentY
+        const galleryStripY = galleryStrip.contentY
+        const propertiesX = propertiesDialog.x
+        const propertiesY = propertiesDialog.y
+        mouseDrag(propertiesHeader, propertiesHeader.width / 2, propertiesHeader.height / 2,
+                  80, 45, Qt.LeftButton)
+        verify(propertiesDialog.x > propertiesX)
+        verify(propertiesDialog.y > propertiesY)
+        compare(contactSheet.contentY, contactSheetY)
+        compare(galleryStrip.contentY, galleryStripY)
+        propertiesDialog.close()
+        tryCompare(contactSheet, "interactive", true)
+        tryCompare(galleryStrip, "interactive", true)
+
+        const rawDialog = findChild(browsePage, "rawParametersDialog")
+        const rawHeader = findChild(rawDialog, "rawParametersDragHeader")
+        verify(rawDialog !== null)
+        verify(rawHeader !== null)
+        rawDialog.openForPath("/Images/ISP calibration/xag_00001.raw")
+        tryCompare(rawDialog, "opened", true)
+        compare(contactSheet.interactive, false)
+        compare(galleryStrip.interactive, false)
+        const rawX = rawDialog.x
+        const rawY = rawDialog.y
+        mouseDrag(rawHeader, rawHeader.width / 2, rawHeader.height / 2,
+                  -80, 45, Qt.LeftButton)
+        verify(rawDialog.x < rawX)
+        verify(rawDialog.y > rawY)
+        rawDialog.close()
+        tryCompare(contactSheet, "interactive", true)
+        tryCompare(galleryStrip, "interactive", true)
+    }
 }

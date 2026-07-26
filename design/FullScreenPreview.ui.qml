@@ -18,9 +18,7 @@ Item {
         iconPrefix: Qt.resolvedUrl("../assets/icons/ui/").toString()
         Component.onCompleted: {
             open(mockFullScreen.paths, 0)
-            topPanelVisible = true
-            rightPanelVisible = true
-            bottomPanelVisible = true
+            showPropertiesDialog()
             pixelText = "(1842,1064) RGBA(80,120,160,255)"
         }
     }

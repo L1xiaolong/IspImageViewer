@@ -325,18 +325,6 @@ Item {
                 onClicked: root.saveScreenshot()
             }
         }
-
-        AppIconButton {
-            objectName: "closeComparisonButton"
-            anchors.right: parent.right
-            anchors.rightMargin: 6
-            anchors.verticalCenter: parent.verticalCenter
-            controlSize: 28
-            renderedIconSize: 16
-            iconSource: "qrc:/icons/ui/close.svg"
-            toolTipText: "Close comparison (Esc)"
-            onClicked: root.closeRequested()
-        }
     }
 
     Item {

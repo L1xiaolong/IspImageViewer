@@ -6,7 +6,8 @@ import "Pages"
 ApplicationWindow {
     id: window
     objectName: "qmlMainWindow"
-    visible: true
+    // C++ shows the window after restoring its last normal/maximized state.
+    visible: false
     width: 1440
     height: 900
     minimumWidth: 980

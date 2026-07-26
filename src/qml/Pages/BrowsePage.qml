@@ -23,6 +23,8 @@ Rectangle {
     property string iconPrefix: "qrc:/icons/ui/"
     readonly property var sortLabels: ["Name", "Modified", "Size", "Type"]
     signal fullScreenRequested(var paths, int initialIndex)
+    readonly property bool contentInteractionEnabled: !propertiesDialog.opened &&
+                                                       !rawParametersDialog.opened
     readonly property bool fileShortcutsEnabled: (workspaceController.hasActivePane === undefined ||
                                                   workspaceController.hasActivePane) &&
                                                   !toolbar.searchControl.activeFocus &&
@@ -281,6 +283,7 @@ Rectangle {
             workspaceController: root.workspaceController
             paneIndex: 0
             iconPrefix: root.iconPrefix
+            contentInteractionEnabled: root.contentInteractionEnabled
             onNewFolderRequested: newFolderDialog.open()
         }
     }
@@ -340,6 +343,7 @@ Rectangle {
                     workspaceController: root.workspaceController
                     paneIndex: index
                     iconPrefix: root.iconPrefix
+                    contentInteractionEnabled: root.contentInteractionEnabled
                     SplitView.fillWidth: index === paneRepeater.count - 1
                     SplitView.minimumWidth: 190
                     SplitView.preferredWidth: (horizontalSplit.width -
@@ -435,6 +439,7 @@ Rectangle {
                     workspaceController: root.workspaceController
                     paneIndex: 0
                     iconPrefix: root.iconPrefix
+                    contentInteractionEnabled: root.contentInteractionEnabled
                     SplitView.fillWidth: false
                     SplitView.minimumWidth: 190
                     SplitView.preferredWidth: (topRow.width - 7) / 2
@@ -446,6 +451,7 @@ Rectangle {
                     workspaceController: root.workspaceController
                     paneIndex: 1
                     iconPrefix: root.iconPrefix
+                    contentInteractionEnabled: root.contentInteractionEnabled
                     SplitView.fillWidth: true
                     SplitView.minimumWidth: 190
                     SplitView.preferredWidth: (topRow.width - 7) / 2
@@ -495,6 +501,7 @@ Rectangle {
                     workspaceController: root.workspaceController
                     paneIndex: 2
                     iconPrefix: root.iconPrefix
+                    contentInteractionEnabled: root.contentInteractionEnabled
                     SplitView.fillWidth: false
                     SplitView.minimumWidth: 190
                     SplitView.preferredWidth: (bottomRow.width - 7) / 2
@@ -506,6 +513,7 @@ Rectangle {
                     workspaceController: root.workspaceController
                     paneIndex: 3
                     iconPrefix: root.iconPrefix
+                    contentInteractionEnabled: root.contentInteractionEnabled
                     SplitView.fillWidth: true
                     SplitView.minimumWidth: 190
                     SplitView.preferredWidth: (bottomRow.width - 7) / 2
@@ -725,7 +733,12 @@ Rectangle {
                     id: galleryFlick
                     anchors.fill: parent
                     clip: true
+                    interactive: root.contentInteractionEnabled
                     boundsBehavior: Flickable.StopAtBounds
+                    onInteractiveChanged: {
+                        if (!interactive)
+                            cancelFlick()
+                    }
                     contentWidth: galleryWorkspace.actualPixels
                                   ? Math.max(width, galleryImage.width + 36) : width
                     contentHeight: galleryWorkspace.actualPixels
@@ -908,7 +921,12 @@ Rectangle {
                 cellWidth: 132
                 cellHeight: 116
                 boundsBehavior: Flickable.StopAtBounds
+                interactive: root.contentInteractionEnabled
                 reuseItems: true
+                onInteractiveChanged: {
+                    if (!interactive)
+                        cancelFlick()
+                }
 
                 delegate: Item {
                     id: galleryDelegate

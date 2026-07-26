@@ -9,6 +9,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QDir>
+#include <QLocale>
 #include <QPointer>
 #include <QQuickWindow>
 
@@ -27,6 +28,18 @@ QString FullScreenController::currentPath() const {
 }
 
 QString FullScreenController::fileName() const { return QFileInfo(currentPath()).fileName(); }
+
+QString FullScreenController::fileType() const {
+    const QString suffix = QFileInfo(currentPath()).suffix().toUpper();
+    return suffix.isEmpty() ? QStringLiteral("IMAGE") : suffix;
+}
+
+QString FullScreenController::fileSizeText() const {
+    const QFileInfo info(currentPath());
+    return info.isFile()
+               ? QLocale().formattedDataSize(info.size(), 1, QLocale::DataSizeTraditionalFormat)
+               : QString{};
+}
 
 QString FullScreenController::positionText() const {
     return currentIndex_ >= 0 ? QStringLiteral("%1 / %2").arg(currentIndex_ + 1).arg(paths_.size())
