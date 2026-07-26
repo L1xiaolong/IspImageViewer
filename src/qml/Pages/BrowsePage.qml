@@ -979,16 +979,34 @@ Rectangle {
                         border.width: galleryDelegate.GridView.isCurrentItem ? 2 : 1
 
                         Image {
+                            id: galleryPreview
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.top: parent.top
                             anchors.margins: 5
                             height: 72
                             source: galleryDelegate.thumbnailUrl
+                            visible: !galleryDelegate.isDirectory
                             sourceSize: Qt.size(320, 240)
                             asynchronous: true
                             cache: true
-                            fillMode: galleryDelegate.isDirectory ? Image.PreserveAspectFit : Image.PreserveAspectCrop
+                            fillMode: Image.PreserveAspectCrop
+                        }
+                        Image {
+                            objectName: "galleryFolderIcon-" + galleryDelegate.index
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.top: parent.top
+                            anchors.topMargin: 12
+                            width: 52
+                            height: 52
+                            source: galleryDelegate.thumbnailUrl
+                            visible: galleryDelegate.isDirectory
+                            sourceSize: Qt.size(160, 160)
+                            asynchronous: true
+                            cache: true
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                            mipmap: true
                         }
                         Text {
                             anchors.left: parent.left

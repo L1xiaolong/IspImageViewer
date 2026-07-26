@@ -11,21 +11,60 @@ Rectangle {
     property bool designMode: false
     property bool browsingEnabled: true
     property string iconPrefix: "qrc:/icons/ui/"
-    color: Theme.paperWhite
+    // Injectable so both native variants can be covered by QML tests on one host.
+    property string platformName: Qt.platform.os
+
+    readonly property bool macStyle: platformName === "osx"
+    readonly property int indentWidth: macStyle ? 16 : 20
+    readonly property int itemHeight: macStyle ? 28 : 26
+    readonly property int iconSize_: macStyle ? 16 : 18
+    readonly property color selectionBg: macStyle ? "#0A64D8" : "#DCEBFA"
+    readonly property color hoverBg: macStyle ? "#12000000" : "#E8F2FC"
+    readonly property color sidebarText: macStyle ? "#252525" : "#202020"
+    readonly property string nativeFont: macStyle ? ".AppleSystemUIFont" : "Segoe UI"
+
+    objectName: "folderNavigatorSurface"
+    color: macStyle ? "#F2F2F2" : "#FAFAFA"
     enabled: browsingEnabled
     opacity: browsingEnabled ? 1 : 0.45
-    border.color: Theme.opticalGray
-    border.width: 0
     clip: true
 
-    // ── Standard-style constants ──
-    readonly property int indentWidth: 18
-    readonly property int itemHeight: 24
-    readonly property int iconSize_: 16
-    readonly property string chevronDown: "▾"
-    readonly property string chevronRight: "▸"
-    readonly property color selectionBg: "#E4E6F1"
-    readonly property color hoverBg: Theme.softHover
+    function pathLabel(path) {
+        const parts = String(path).split(/[\\/]/)
+        return parts.length > 0 && parts[parts.length - 1].length > 0
+                ? parts[parts.length - 1] : path
+    }
+
+    function folderIcon(expanded) {
+        if (root.macStyle)
+            return root.iconPrefix + (expanded ? "macos-folder-open.svg" : "macos-folder.svg")
+        return root.iconPrefix + (expanded ? "windows-folder-open.svg" : "windows-folder.svg")
+    }
+
+    function quickAccessEntries() {
+        const entries = []
+        const seen = ({})
+        const places = root.controller.nativeSidebarPlaces || []
+        for (let index = 0; index < places.length; ++index) {
+            const place = places[index]
+            const key = root.platformName === "windows"
+                    ? String(place.path).toLowerCase() : String(place.path)
+            if (!seen[key]) {
+                entries.push(place)
+                seen[key] = true
+            }
+        }
+        const recent = root.controller.recentFolders || []
+        for (let index = 0; index < recent.length && index < 4; ++index) {
+            const path = String(recent[index])
+            const key = root.platformName === "windows" ? path.toLowerCase() : path
+            if (!seen[key]) {
+                entries.push({ label: root.pathLabel(path), path: path, kind: "recent" })
+                seen[key] = true
+            }
+        }
+        return entries
+    }
 
     function revealCurrentFolder() {
         if (root.designMode || root.controller.currentDirectory.length === 0 ||
@@ -42,6 +81,7 @@ Rectangle {
     Connections {
         target: root.designMode ? null : root.controller.folderTree
         function onDirectoryLoaded(path) {
+            folderTree.forceLayout()
             if (root.controller.currentDirectory.startsWith(path))
                 root.revealCurrentFolder()
         }
@@ -51,92 +91,118 @@ Rectangle {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 0
         spacing: 0
 
-        // ── RECENT section header ──
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: root.macStyle ? 12 : 8
+        }
+
         Rectangle {
             Layout.fillWidth: true
-            height: 32
+            implicitHeight: root.macStyle ? 25 : 30
             color: "transparent"
+
             Text {
+                id: favoritesHeading
+                objectName: "nativeFavoritesHeading"
                 anchors.left: parent.left
-                anchors.leftMargin: 20
+                anchors.leftMargin: root.macStyle ? 12 : 14
                 anchors.verticalCenter: parent.verticalCenter
-                text: "RECENT"
-                color: Theme.mutedInk
-                font.family: Theme.uiFont
-                font.pixelSize: 11
+                text: root.macStyle ? "Favorites" : "Quick access"
+                color: root.macStyle ? "#777777" : "#3B3B3B"
+                font.family: root.nativeFont
+                font.pixelSize: root.macStyle ? 11 : 12
                 font.weight: Font.DemiBold
-                font.capitalization: Font.AllUppercase
-                font.letterSpacing: 0.8
             }
         }
+
         Repeater {
-            model: root.browsingEnabled ? root.controller.recentFolders.slice(0, 4) : []
+            model: root.browsingEnabled ? root.quickAccessEntries() : []
+
             delegate: Rectangle {
-                required property string modelData
-                width: parent ? parent.width : 0
-                height: root.itemHeight
-                color: recentMouse.containsMouse ? root.hoverBg : "transparent"
+                id: placeDelegate
+                required property var modelData
+                Layout.fillWidth: true
+                implicitHeight: root.itemHeight
+                color: "transparent"
+                readonly property bool selected:
+                    String(placeDelegate.modelData.path) === root.controller.currentDirectory
+
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.leftMargin: root.macStyle ? 6 : 0
+                    anchors.rightMargin: root.macStyle ? 6 : 0
+                    anchors.topMargin: root.macStyle ? 1 : 0
+                    anchors.bottomMargin: root.macStyle ? 1 : 0
+                    radius: root.macStyle ? 5 : 0
+                    color: placeDelegate.selected ? root.selectionBg
+                           : placeMouse.containsMouse ? root.hoverBg : "transparent"
+                }
+
                 Image {
-                    x: 20
+                    x: root.macStyle ? 14 : 18
                     anchors.verticalCenter: parent.verticalCenter
                     width: root.iconSize_
                     height: root.iconSize_
-                    source: root.iconPrefix + "folder.svg"
+                    source: root.folderIcon(placeDelegate.selected)
                     sourceSize: Qt.size(32, 32)
+                    opacity: root.macStyle ? 0.86 : 1
                 }
+
                 Text {
-                    x: 42
-                    width: parent.width - 50
+                    x: root.macStyle ? 40 : 46
+                    width: Math.max(0, parent.width - x - 12)
                     anchors.verticalCenter: parent.verticalCenter
-                    text: modelData.split(/[\\/]/).pop()
+                    text: placeDelegate.modelData.label
                     elide: Text.ElideMiddle
-                    color: Theme.graphiteInk
-                    font.family: Theme.uiFont
-                    font.pixelSize: 13
-                    font.weight: Font.DemiBold
+                    color: placeDelegate.selected && root.macStyle ? "white" : root.sidebarText
+                    font.family: root.nativeFont
+                    font.pixelSize: root.macStyle ? 13 : 12
                 }
+
                 MouseArea {
-                    id: recentMouse
+                    id: placeMouse
                     anchors.fill: parent
                     hoverEnabled: true
-                    onClicked: root.controller.openDirectory(modelData)
+                    acceptedButtons: Qt.LeftButton
+                    onClicked: root.controller.openDirectory(placeDelegate.modelData.path)
                 }
             }
         }
 
-        // ── Spacing between sections ──
-        Item { Layout.fillWidth: true; height: 10 }
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: root.macStyle ? 9 : 6
+        }
 
-        // ── PROJECT TREE section header ──
         Rectangle {
             Layout.fillWidth: true
-            height: 32
+            implicitHeight: root.macStyle ? 25 : 30
             color: "transparent"
+
             Text {
+                id: locationsHeading
+                objectName: "nativeLocationsHeading"
                 anchors.left: parent.left
-                anchors.leftMargin: 20
+                anchors.leftMargin: root.macStyle ? 12 : 14
                 anchors.verticalCenter: parent.verticalCenter
-                text: "EXPLORER"
-                color: Theme.mutedInk
-                font.family: Theme.uiFont
-                font.pixelSize: 11
+                text: root.macStyle ? "Locations" : "This PC"
+                color: root.macStyle ? "#777777" : "#3B3B3B"
+                font.family: root.nativeFont
+                font.pixelSize: root.macStyle ? 11 : 12
                 font.weight: Font.DemiBold
-                font.capitalization: Font.AllUppercase
-                font.letterSpacing: 0.8
             }
         }
 
-        // ── VS Code-style file tree ──
         TreeView {
             id: folderTree
+            objectName: "nativeFolderTree"
             Layout.fillWidth: true
             Layout.fillHeight: true
             model: root.controller.folderTree
             rootIndex: root.designMode ? undefined : root.controller.folderRootIndex
-            columnWidthProvider: function (column) { return width; }
+            columnWidthProvider: function (column) { return width }
             boundsBehavior: Flickable.StopAtBounds
             clip: true
 
@@ -154,93 +220,103 @@ Rectangle {
 
                 implicitWidth: folderTree.width
                 implicitHeight: root.itemHeight
-
-                // A directory node has children or is marked as a tree node by the model.
-                readonly property bool isDirectory: treeDelegate.hasChildren || treeDelegate.isTreeNode
-                readonly property bool isCurrentFolder: filePath === root.controller.currentDirectory
-
-                // ── Background ──
-                Rectangle {
-                    anchors.fill: parent
-                    color: treeDelegate.isCurrentFolder ? root.selectionBg
-                           : treeMouse.containsMouse ? root.hoverBg : "transparent"
+                readonly property bool isDirectory: hasChildren || isTreeNode
+                readonly property bool isCurrentFolder:
+                    filePath === root.controller.currentDirectory
+                function toggleDirectoryExpansion() {
+                    if (!treeDelegate.isDirectory)
+                        return
+                    if (treeDelegate.expanded)
+                        treeDelegate.treeView.collapse(treeDelegate.row)
+                    else {
+                        treeDelegate.treeView.expand(treeDelegate.row)
+                        root.controller.loadFolderTreeChildren(treeDelegate.filePath)
+                    }
                 }
 
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.leftMargin: root.macStyle ? 6 : 0
+                    anchors.rightMargin: root.macStyle ? 6 : 0
+                    anchors.topMargin: root.macStyle ? 1 : 0
+                    anchors.bottomMargin: root.macStyle ? 1 : 0
+                    radius: root.macStyle ? 5 : 0
+                    color: treeDelegate.isCurrentFolder ? root.selectionBg
+                           : disclosureMouse.containsMouse || directoryMouse.containsMouse
+                             ? root.hoverBg : "transparent"
+                }
 
-                // ── Expand/collapse chevron ──
                 Text {
-                    x: treeDelegate.depth * root.indentWidth + 2
+                    x: treeDelegate.depth * root.indentWidth + (root.macStyle ? 7 : 5)
                     anchors.verticalCenter: parent.verticalCenter
                     width: root.indentWidth
                     height: root.itemHeight
                     text: treeDelegate.isDirectory
-                          ? (treeDelegate.expanded ? root.chevronDown : root.chevronRight)
-                          : ""
-                    color: Theme.mutedInk
-                    font.pixelSize: 13
-                    font.family: Theme.uiFont
+                          ? (treeDelegate.expanded ? "▾" : "▸") : ""
+                    color: treeDelegate.isCurrentFolder && root.macStyle ? "white" : "#666666"
+                    font.family: root.nativeFont
+                    font.pixelSize: root.macStyle ? 11 : 12
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
 
-                // ── Icon ──
                 Image {
-                    x: treeDelegate.depth * root.indentWidth + root.indentWidth + 4
+                    x: treeDelegate.depth * root.indentWidth + root.indentWidth +
+                       (root.macStyle ? 9 : 8)
                     anchors.verticalCenter: parent.verticalCenter
                     width: root.iconSize_
                     height: root.iconSize_
-                    source: treeDelegate.isDirectory
-                            ? root.iconPrefix + "folder.svg"
-                            : root.iconPrefix + "actual-size.svg"
+                    source: !root.macStyle && treeDelegate.depth === 0
+                            ? root.iconPrefix + "windows-drive.svg"
+                            : root.folderIcon(treeDelegate.expanded)
                     sourceSize: Qt.size(32, 32)
-                    opacity: treeDelegate.isDirectory ? 0.8 : 0.65
+                    opacity: root.macStyle ? 0.86 : 1
                 }
 
-                // ── Label ──
                 Text {
-                    x: treeDelegate.depth * root.indentWidth + root.indentWidth + root.iconSize_ + 10
+                    x: treeDelegate.depth * root.indentWidth + root.indentWidth +
+                       root.iconSize_ + (root.macStyle ? 14 : 15)
                     width: Math.max(0, parent.width - x - 10)
                     anchors.verticalCenter: parent.verticalCenter
                     text: treeDelegate.display
                     elide: Text.ElideRight
-                    color: Theme.graphiteInk
-                    font.family: Theme.uiFont
-                    font.pixelSize: 13
-                    font.weight: treeDelegate.isDirectory ? Font.DemiBold : Font.Normal
+                    color: treeDelegate.isCurrentFolder && root.macStyle
+                           ? "white" : root.sidebarText
+                    font.family: root.nativeFont
+                    font.pixelSize: root.macStyle ? 13 : 12
+                    font.weight: Font.Normal
                 }
 
-                // ── Interaction ──
                 MouseArea {
-                    id: treeMouse
-                    anchors.fill: parent
+                    id: disclosureMouse
+                    objectName: "folderDisclosure-" + treeDelegate.row
+                    x: treeDelegate.depth * root.indentWidth
+                    width: root.indentWidth + 6
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    enabled: treeDelegate.isDirectory
                     hoverEnabled: true
-                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                    onClicked: function (mouse) {
-                        if (mouse.button === Qt.RightButton) {
-                            // Right-click: expand/collapse toggle for directories
-                            if (treeDelegate.isDirectory) {
-                                treeDelegate.treeView.toggleExpanded(treeDelegate.row);
-                                root.controller.openDirectory(treeDelegate.filePath);
-                            }
-                            return;
-                        }
-                        // Left-click on chevron area: toggle expand and navigate
-                        const chevronRightEdge = (treeDelegate.depth + 1) * root.indentWidth;
-                        if (treeDelegate.isDirectory && mouse.x < chevronRightEdge + 4) {
-                            treeDelegate.treeView.toggleExpanded(treeDelegate.row);
-                            root.controller.openDirectory(treeDelegate.filePath);
-                            return;
-                        }
-                        // Left-click on item body: activate
-                        root.controller.activateTreeItem(treeDelegate.filePath);
-                    }
-                    onDoubleClicked: {
-                        if (treeDelegate.isDirectory) {
-                            treeDelegate.treeView.toggleExpanded(treeDelegate.row);
-                            root.controller.openDirectory(treeDelegate.filePath);
-                        }
-                    }
+                    acceptedButtons: Qt.LeftButton
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: treeDelegate.toggleDirectoryExpansion()
                 }
+
+                MouseArea {
+                    id: directoryMouse
+                    objectName: "folderDirectory-" + treeDelegate.row
+                    x: disclosureMouse.x + disclosureMouse.width
+                    width: Math.max(0, parent.width - x)
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    hoverEnabled: true
+                    acceptedButtons: Qt.LeftButton
+                    onClicked: root.controller.openDirectory(treeDelegate.filePath)
+                }
+            }
+
+            ScrollBar.vertical: ScrollBar {
+                policy: ScrollBar.AsNeeded
+                width: root.macStyle ? 8 : 10
             }
         }
     }

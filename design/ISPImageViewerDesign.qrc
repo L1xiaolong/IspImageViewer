@@ -6,6 +6,11 @@
         <file>../assets/icons/ui/folder-open.svg</file>
         <file>../assets/icons/ui/folder-plus.svg</file>
         <file>../assets/icons/ui/folder-pane-plus.svg</file>
+        <file>../assets/icons/ui/windows-folder.svg</file>
+        <file>../assets/icons/ui/windows-folder-open.svg</file>
+        <file>../assets/icons/ui/windows-drive.svg</file>
+        <file>../assets/icons/ui/macos-folder.svg</file>
+        <file>../assets/icons/ui/macos-folder-open.svg</file>
         <file>../assets/icons/ui/close.svg</file>
         <file>../assets/icons/ui/folder.svg</file>
         <file>../assets/icons/ui/forward.svg</file>

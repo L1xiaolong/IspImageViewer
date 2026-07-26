@@ -21,6 +21,7 @@
 #include <QPointer>
 #include <QSettings>
 #include <QSet>
+#include <QStandardPaths>
 #include <QThreadPool>
 #include <QTimer>
 
@@ -54,9 +55,10 @@ void BrowseController::initialize(const QString& initialDirectory, bool startEmp
     refreshDeadlineTimer_ = new QTimer(this);
     recentCandidateTimer_ = new QTimer(this);
     filterModel_->setSourceModel(thumbnailModel_);
-    fileSystemModel_->setFilter(QDir::Dirs | QDir::Files | QDir::Readable |
-                                QDir::NoDotAndDotDot | QDir::NoSymLinks | QDir::Drives);
-    fileSystemModel_->setNameFilters(supportedImageNameFilters());
+    // The system navigation pane represents folders only, matching Explorer and Finder.
+    // Image filtering belongs to ThumbnailModel; putting files into the navigation model both
+    // diverges from native sidebars and needlessly expands large directory trees.
+    fileSystemModel_->setFilter(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Drives);
 #ifdef Q_OS_WIN
     // Invalid root index exposes all native drive roots on Windows.
     fileSystemModel_->setRootPath(QString{});
@@ -223,6 +225,18 @@ QModelIndex BrowseController::currentFolderTreeIndex() const {
     return currentDirectory_.isEmpty() ? QModelIndex{} : fileSystemModel_->index(currentDirectory_);
 }
 
+void BrowseController::loadFolderTreeChildren(const QString& path) {
+    if (path.trimmed().isEmpty()) return;
+    // QFileSystemModel does not begin asynchronously populating an uncached branch merely
+    // because TreeView marks its row expanded. setRootPath() starts the gatherer for this path;
+    // per Qt's contract it does not change the model structure or the root shown by the view.
+    const QModelIndex directoryIndex = fileSystemModel_->setRootPath(QDir::cleanPath(path));
+    if (!directoryIndex.isValid()) return;
+    if (fileSystemModel_->canFetchMore(directoryIndex)) {
+        fileSystemModel_->fetchMore(directoryIndex);
+    }
+}
+
 QString BrowseController::currentFolderName() const {
     const QString name = QFileInfo(currentDirectory_).fileName();
     return name.isEmpty() ? QDir::toNativeSeparators(currentDirectory_) : name;
@@ -277,6 +291,47 @@ void BrowseController::openDirectory(const QString& path) { openDirectoryInterna
 
 void BrowseController::openDirectoryUrl(const QUrl& url) {
     if (url.isLocalFile()) openDirectoryInternal(url.toLocalFile(), true);
+}
+
+QVariantList BrowseController::nativeSidebarPlaces() const {
+    QVariantList places;
+    QSet<QString> seenPaths;
+    const auto appendPlace = [&places, &seenPaths](const QString& label, const QString& path,
+                                                   const QString& kind) {
+        if (path.isEmpty()) return;
+        const QString cleanPath = QDir::cleanPath(path);
+#ifdef Q_OS_WIN
+        const QString key = cleanPath.toLower();
+#else
+        const QString key = cleanPath;
+#endif
+        if (seenPaths.contains(key)) return;
+        seenPaths.insert(key);
+        places.append(QVariantMap{{QStringLiteral("label"), label},
+                                  {QStringLiteral("path"), cleanPath},
+                                  {QStringLiteral("kind"), kind}});
+    };
+
+#ifdef Q_OS_MACOS
+    const QString homeLabel = QFileInfo(QDir::homePath()).fileName();
+    appendPlace(homeLabel.isEmpty() ? QStringLiteral("Home") : homeLabel, QDir::homePath(),
+                QStringLiteral("home"));
+#else
+    appendPlace(QStringLiteral("Home"), QDir::homePath(), QStringLiteral("home"));
+#endif
+    appendPlace(QStringLiteral("Desktop"),
+                QStandardPaths::writableLocation(QStandardPaths::DesktopLocation),
+                QStringLiteral("desktop"));
+    appendPlace(QStringLiteral("Documents"),
+                QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation),
+                QStringLiteral("documents"));
+    appendPlace(QStringLiteral("Downloads"),
+                QStandardPaths::writableLocation(QStandardPaths::DownloadLocation),
+                QStringLiteral("downloads"));
+    appendPlace(QStringLiteral("Pictures"),
+                QStandardPaths::writableLocation(QStandardPaths::PicturesLocation),
+                QStringLiteral("pictures"));
+    return places;
 }
 
 void BrowseController::restoreInitialDirectoryAsync(const QString& initialDirectory) {

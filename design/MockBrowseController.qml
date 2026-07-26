@@ -147,6 +147,13 @@ QtObject {
             filePath: "/Images/RAW captures"
         }
     }
+    property var nativeSidebarPlaces: [
+        { label: "Home", path: "/Users/demo", kind: "home" },
+        { label: "Desktop", path: "/Users/demo/Desktop", kind: "desktop" },
+        { label: "Documents", path: "/Users/demo/Documents", kind: "documents" },
+        { label: "Downloads", path: "/Users/demo/Downloads", kind: "downloads" },
+        { label: "Pictures", path: "/Users/demo/Pictures", kind: "pictures" }
+    ]
 
     function setFilterText(text) {
         filterText = text;
@@ -195,6 +202,8 @@ QtObject {
         currentDirectory = path;
         currentFolderName = path.split("/").pop();
     }
+
+    function loadFolderTreeChildren(path) {}
     function chooseDirectory() {
         directorySelectionRequested("file:///Images/ISP%20calibration");
     }

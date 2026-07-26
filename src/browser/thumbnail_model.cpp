@@ -25,6 +25,16 @@ QString formattedFileSize(qint64 bytes) {
     return QStringLiteral("%1 KB").arg(QLocale().toString(qMax<qint64>(1, bytes / 1024)));
 }
 
+QString platformFolderIconName() {
+#ifdef Q_OS_MACOS
+    return QStringLiteral("macos-folder.svg");
+#elif defined(Q_OS_WIN)
+    return QStringLiteral("windows-folder.svg");
+#else
+    return QStringLiteral("folder.svg");
+#endif
+}
+
 QPixmap textPlaceholder(const QString& text) {
     QPixmap result(160, 120);
     result.fill(QColor(48, 51, 57));
@@ -37,7 +47,9 @@ QPixmap textPlaceholder(const QString& text) {
 
 QPixmap folderPlaceholder() {
     const QIcon icon = QIcon::fromTheme(QStringLiteral("folder"));
-    return icon.isNull() ? textPlaceholder(QStringLiteral("Folder")) : icon.pixmap(120, 96);
+    if (!icon.isNull()) return icon.pixmap(120, 96);
+    const QPixmap bundled(QStringLiteral(":/icons/ui/%1").arg(platformFolderIconName()));
+    return bundled.isNull() ? textPlaceholder(QStringLiteral("Folder")) : bundled;
 }
 
 } // namespace
@@ -97,7 +109,9 @@ QVariant ThumbnailModel::data(const QModelIndex& index, int role) const {
     case DimensionsRole:
         return dimensions_.value(file.path);
     case ThumbnailUrlRole: {
-        if (file.isDirectory) return QStringLiteral("qrc:/icons/ui/folder.svg");
+        if (file.isDirectory) {
+            return QStringLiteral("qrc:/icons/ui/%1").arg(platformFolderIconName());
+        }
         QString revision = QStringLiteral("%1-%2")
                                .arg(file.fileSize)
                                .arg(file.modifiedAt.toMSecsSinceEpoch());

@@ -58,16 +58,32 @@ Item {
                 border.width: 1
                 clip: true
                 Image {
+                    id: gridPreview
                     anchors.fill: parent
-                    anchors.margins: root.directory ? 28 : 0
                     // Keep both URL and requested size stable while the GridView moves. Changing
                     // either one cancels the current async response and briefly clears the texture,
                     // which appears as periodic flashing during a long scroll.
                     source: root.thumbnailUrl
+                    visible: !root.directory
                     asynchronous: true
                     cache: true
-                    sourceSize: root.directory ? Qt.size(32, 32) : Qt.size(384, 384)
-                    fillMode: root.directory ? Image.PreserveAspectFit : Image.PreserveAspectCrop
+                    sourceSize: Qt.size(384, 384)
+                    fillMode: Image.PreserveAspectCrop
+                }
+                Image {
+                    id: gridFolderIcon
+                    objectName: "gridFolderIcon"
+                    anchors.centerIn: parent
+                    width: Math.round(Math.min(imageWell.width, imageWell.height) * 0.58)
+                    height: width
+                    source: root.thumbnailUrl
+                    visible: root.directory
+                    asynchronous: true
+                    cache: true
+                    sourceSize: Qt.size(192, 192)
+                    fillMode: Image.PreserveAspectFit
+                    smooth: true
+                    mipmap: true
                 }
             }
             Text {
@@ -121,13 +137,29 @@ Item {
                 border.width: 1
                 clip: true
                 Image {
+                    id: listPreview
                     anchors.fill: parent
-                    anchors.margins: root.directory ? 14 : 0
                     source: root.thumbnailUrl
+                    visible: !root.directory
                     asynchronous: true
                     cache: true
-                    sourceSize: root.directory ? Qt.size(32, 32) : Qt.size(256, 256)
-                    fillMode: root.directory ? Image.PreserveAspectFit : Image.PreserveAspectCrop
+                    sourceSize: Qt.size(256, 256)
+                    fillMode: Image.PreserveAspectCrop
+                }
+                Image {
+                    id: listFolderIcon
+                    objectName: "listFolderIcon"
+                    anchors.centerIn: parent
+                    width: 36
+                    height: 36
+                    source: root.thumbnailUrl
+                    visible: root.directory
+                    asynchronous: true
+                    cache: true
+                    sourceSize: Qt.size(128, 128)
+                    fillMode: Image.PreserveAspectFit
+                    smooth: true
+                    mipmap: true
                 }
             }
             Text {

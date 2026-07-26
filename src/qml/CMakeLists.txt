@@ -60,6 +60,11 @@ set(_ispview_qml_icons
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/folder-open.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/folder-plus.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/folder-pane-plus.svg
+    ${PROJECT_SOURCE_DIR}/assets/icons/ui/windows-folder.svg
+    ${PROJECT_SOURCE_DIR}/assets/icons/ui/windows-folder-open.svg
+    ${PROJECT_SOURCE_DIR}/assets/icons/ui/windows-drive.svg
+    ${PROJECT_SOURCE_DIR}/assets/icons/ui/macos-folder.svg
+    ${PROJECT_SOURCE_DIR}/assets/icons/ui/macos-folder-open.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/close.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/search.svg
     ${PROJECT_SOURCE_DIR}/assets/icons/ui/sort.svg

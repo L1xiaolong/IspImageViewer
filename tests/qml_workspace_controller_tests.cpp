@@ -73,6 +73,9 @@ class QmlWorkspaceControllerTests final : public QObject {
     void initTestCase();
     void addsActivatesAndClosesOneToFourPanes();
     void defersStartupDirectoryUntilExplicitlyStarted();
+    void exposesNativeFolderNavigationStructure();
+    void loadsFolderTreeChildrenWithoutNavigating();
+    void usesPlatformFolderIconForThumbnailDirectories();
     void keepsPaneStateIndependent();
     void aggregatesUniqueSelectionsInStableOrder();
     void copiesDropsIntoSubfoldersAndAcrossPanes();
@@ -169,6 +172,70 @@ void QmlWorkspaceControllerTests::defersStartupDirectoryUntilExplicitlyStarted()
     workspace.startDeferredInitialDirectory();
     QCOMPARE(paneAt(workspace, 0)->currentDirectory(),
              QFileInfo(selectedDirectory.path()).absoluteFilePath());
+}
+
+void QmlWorkspaceControllerTests::exposesNativeFolderNavigationStructure() {
+    BrowseController controller(std::make_shared<QtImageDecoder>(), {}, this);
+    const QVariantList places = controller.nativeSidebarPlaces();
+    QVERIFY(!places.isEmpty());
+
+    QSet<QString> paths;
+    for (const QVariant& value : places) {
+        const QVariantMap place = value.toMap();
+        QVERIFY(!place.value(QStringLiteral("label")).toString().isEmpty());
+        const QString path = place.value(QStringLiteral("path")).toString();
+        QVERIFY(!path.isEmpty());
+        QVERIFY(!paths.contains(path));
+        paths.insert(path);
+    }
+
+    auto* folderModel = qobject_cast<QFileSystemModel*>(controller.folderTree());
+    QVERIFY(folderModel);
+    QVERIFY(folderModel->filter().testFlag(QDir::Dirs));
+    QVERIFY(!folderModel->filter().testFlag(QDir::Files));
+}
+
+void QmlWorkspaceControllerTests::loadsFolderTreeChildrenWithoutNavigating() {
+    // Keep this QFileSystemModel fixture under the build tree. The managed Windows test
+    // environment intentionally blocks the model's worker thread from enumerating AppData.
+    QTemporaryDir directory(QDir::current().filePath(QStringLiteral("folder-tree-XXXXXX")));
+    QVERIFY(directory.isValid());
+    const QString previewDirectory = directory.filePath(QStringLiteral("preview"));
+    const QString expandableDirectory = directory.filePath(QStringLiteral("expandable"));
+    const QString childDirectory = QDir(expandableDirectory).filePath(QStringLiteral("child"));
+    QVERIFY(QDir().mkpath(previewDirectory));
+    QVERIFY(QDir().mkpath(childDirectory));
+
+    BrowseController controller(std::make_shared<QtImageDecoder>(), previewDirectory, this);
+    auto* folderModel = qobject_cast<QFileSystemModel*>(controller.folderTree());
+    QVERIFY(folderModel);
+    const QString currentDirectory = controller.currentDirectory();
+
+    controller.loadFolderTreeChildren(expandableDirectory);
+    const QModelIndex expandableIndex = folderModel->index(expandableDirectory);
+    QVERIFY(expandableIndex.isValid());
+    QTRY_VERIFY_WITH_TIMEOUT(folderModel->rowCount(expandableIndex) > 0, 3000);
+    QVERIFY(folderModel->index(childDirectory).isValid());
+    QCOMPARE(controller.currentDirectory(), currentDirectory);
+}
+
+void QmlWorkspaceControllerTests::usesPlatformFolderIconForThumbnailDirectories() {
+    ImageLoader loader(std::make_shared<QtImageDecoder>());
+    ThumbnailModel model(&loader);
+    ImageFileRecord directory;
+    directory.path = QStringLiteral("C:/Pictures");
+    directory.fileName = QStringLiteral("Pictures");
+    directory.isDirectory = true;
+    model.setFiles({directory});
+
+#ifdef Q_OS_MACOS
+    const QString expected = QStringLiteral("qrc:/icons/ui/macos-folder.svg");
+#elif defined(Q_OS_WIN)
+    const QString expected = QStringLiteral("qrc:/icons/ui/windows-folder.svg");
+#else
+    const QString expected = QStringLiteral("qrc:/icons/ui/folder.svg");
+#endif
+    QCOMPARE(model.index(0).data(ThumbnailModel::ThumbnailUrlRole).toString(), expected);
 }
 
 void QmlWorkspaceControllerTests::keepsPaneStateIndependent() {

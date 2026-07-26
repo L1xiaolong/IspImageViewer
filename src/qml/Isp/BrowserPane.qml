@@ -14,6 +14,10 @@ Rectangle {
     property bool contentInteractionEnabled: true
     property string iconPrefix: "qrc:/icons/ui/"
     property int displayMode: controller.displayMode
+    readonly property string platformFolderIcon:
+        iconPrefix + (Qt.platform.os === "osx" ? "macos-folder.svg"
+                                               : Qt.platform.os === "windows"
+                                                 ? "windows-folder.svg" : "folder.svg")
     signal newFolderRequested
 
     color: Theme.sensorWhite
@@ -43,13 +47,15 @@ Rectangle {
         color: root.active ? "#F7FAFC" : Theme.paperWhite
 
         Image {
+            objectName: "paneFolderIcon-" + root.paneIndex
             anchors.left: parent.left
             anchors.leftMargin: 10
             anchors.verticalCenter: parent.verticalCenter
             width: 16
             height: 16
-            source: root.iconPrefix + (root.controller.currentDirectory.length > 0
-                                       ? "folder.svg" : "folder-pane-plus.svg")
+            source: root.controller.currentDirectory.length > 0
+                    ? root.platformFolderIcon
+                    : root.iconPrefix + "folder-pane-plus.svg"
             sourceSize: Qt.size(32, 32)
             opacity: root.controller.currentDirectory.length > 0 ? 0.78 : 0.58
         }

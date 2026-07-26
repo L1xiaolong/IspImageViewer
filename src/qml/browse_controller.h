@@ -9,6 +9,7 @@
 #include <QObject>
 #include <QStringList>
 #include <QUrl>
+#include <QVariantList>
 
 #include <memory>
 
@@ -35,6 +36,7 @@ class BrowseController final : public QObject {
     Q_PROPERTY(QString currentDirectory READ currentDirectory NOTIFY currentDirectoryChanged)
     Q_PROPERTY(QString currentFolderName READ currentFolderName NOTIFY currentDirectoryChanged)
     Q_PROPERTY(QStringList recentFolders READ recentFolders NOTIFY recentFoldersChanged)
+    Q_PROPERTY(QVariantList nativeSidebarPlaces READ nativeSidebarPlaces CONSTANT)
     Q_PROPERTY(QStringList selectedPaths READ selectedPaths NOTIFY selectionChanged)
     Q_PROPERTY(QList<QUrl> selectedFileUrls READ selectedFileUrls NOTIFY selectionChanged)
     Q_PROPERTY(QString selectedUriList READ selectedUriList NOTIFY selectionChanged)
@@ -68,6 +70,7 @@ class BrowseController final : public QObject {
     [[nodiscard]] QString currentDirectory() const { return currentDirectory_; }
     [[nodiscard]] QString currentFolderName() const;
     [[nodiscard]] QStringList recentFolders() const { return recentFolders_; }
+    [[nodiscard]] QVariantList nativeSidebarPlaces() const;
     [[nodiscard]] QStringList selectedPaths() const { return selectedPaths_; }
     [[nodiscard]] QList<QUrl> selectedFileUrls() const;
     [[nodiscard]] QString selectedUriList() const;
@@ -93,6 +96,7 @@ class BrowseController final : public QObject {
 
     Q_INVOKABLE void openDirectory(const QString& path);
     Q_INVOKABLE void openDirectoryUrl(const QUrl& url);
+    Q_INVOKABLE void loadFolderTreeChildren(const QString& path);
     void restoreInitialDirectoryAsync(const QString& initialDirectory = {});
     Q_INVOKABLE void chooseDirectory();
     Q_INVOKABLE void navigateBack();

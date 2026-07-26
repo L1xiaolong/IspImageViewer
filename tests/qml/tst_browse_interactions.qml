@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import "../../design"
+import "../../src/qml/Isp"
 import "../../src/qml/Pages"
 
 TestCase {
@@ -29,6 +30,9 @@ TestCase {
 
     function init() {
         browsePage.displayMode = 2;
+        const navigator = findChild(browsePage, "folderNavigator")
+        if (navigator !== null)
+            navigator.platformName = Qt.platform.os
         mockController.clearSelection();
         mockController.selectPath(mockController.thumbnails.get(0).path, false, false);
         mockController.selectPath(mockController.thumbnails.get(1).path, false, true);
@@ -104,6 +108,73 @@ TestCase {
         tryCompare(trashDialog, "opened", true);
         verify(trashDialog.message.indexOf("selected item") >= 0);
         trashDialog.close();
+    }
+
+    ThumbnailTile {
+        id: directoryTile
+        visible: false
+        width: 196
+        controller: testCase.mockController
+        workspaceController: mockWorkspace
+        path: "/Images/Folder"
+        fileName: "Folder"
+        technicalLabel: "Folder"
+        thumbnailUrl: Qt.resolvedUrl("../../assets/icons/ui/" +
+                                    (Qt.platform.os === "osx" ? "macos-folder.svg"
+                                                              : "windows-folder.svg"))
+        directory: true
+        displayMode: 0
+    }
+
+    function test_folderNavigatorUsesNativePlatformOrganization() {
+        const navigator = findChild(browsePage, "folderNavigator")
+        const favoritesHeading = findChild(navigator, "nativeFavoritesHeading")
+        const locationsHeading = findChild(navigator, "nativeLocationsHeading")
+        const nativeTree = findChild(navigator, "nativeFolderTree")
+        verify(navigator !== null)
+        verify(favoritesHeading !== null)
+        verify(locationsHeading !== null)
+        verify(nativeTree !== null)
+
+        navigator.platformName = "windows"
+        compare(favoritesHeading.text, "Quick access")
+        compare(locationsHeading.text, "This PC")
+        compare(navigator.macStyle, false)
+
+        navigator.platformName = "osx"
+        compare(favoritesHeading.text, "Favorites")
+        compare(locationsHeading.text, "Locations")
+        compare(navigator.macStyle, true)
+    }
+
+    function test_folderEntitiesUseTheCurrentPlatformIcon() {
+        const paneFolderIcon = findChild(browsePage, "paneFolderIcon-0")
+        verify(paneFolderIcon !== null)
+        const expectedName = Qt.platform.os === "osx"
+                ? "macos-folder.svg"
+                : Qt.platform.os === "windows"
+                  ? "windows-folder.svg" : "folder.svg"
+        verify(paneFolderIcon.source.toString().endsWith(expectedName))
+    }
+
+    function test_directoryThumbnailKeepsSquareHighResolutionTexture() {
+        directoryTile.displayMode = 0
+        wait(0)
+        const gridIcon = findChild(directoryTile, "gridFolderIcon")
+        verify(gridIcon !== null)
+        compare(gridIcon.width, gridIcon.height)
+        verify(gridIcon.sourceSize.width >= 160)
+        compare(gridIcon.sourceSize.width, gridIcon.sourceSize.height)
+        compare(gridIcon.fillMode, Image.PreserveAspectFit)
+
+        directoryTile.displayMode = 1
+        wait(0)
+        const listIcon = findChild(directoryTile, "listFolderIcon")
+        verify(listIcon !== null)
+        compare(listIcon.width, listIcon.height)
+        verify(listIcon.sourceSize.width >= 96)
+        compare(listIcon.sourceSize.width, listIcon.sourceSize.height)
+        compare(listIcon.fillMode, Image.PreserveAspectFit)
     }
 
     function test_propertiesAndRawCardsCanBeDraggedByTheirHeaders() {
