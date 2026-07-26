@@ -72,6 +72,7 @@ class QmlWorkspaceControllerTests final : public QObject {
   private slots:
     void initTestCase();
     void addsActivatesAndClosesOneToFourPanes();
+    void defersStartupDirectoryUntilExplicitlyStarted();
     void keepsPaneStateIndependent();
     void aggregatesUniqueSelectionsInStableOrder();
     void copiesDropsIntoSubfoldersAndAcrossPanes();
@@ -147,6 +148,27 @@ void QmlWorkspaceControllerTests::addsActivatesAndClosesOneToFourPanes() {
     QCOMPARE(workspace.activePaneIndex(), 0);
     QVERIFY(workspace.hasActivePane());
     QVERIFY(paneAt(workspace, 0)->currentDirectory().isEmpty());
+}
+
+void QmlWorkspaceControllerTests::defersStartupDirectoryUntilExplicitlyStarted() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    BrowseWorkspaceController workspace(std::make_shared<QtImageDecoder>(), directory.path(), true);
+
+    QCOMPARE(paneAt(workspace, 0)->currentDirectory(), QString{});
+    workspace.addFileManagerPane();
+    workspace.startDeferredInitialDirectory();
+    QTRY_COMPARE_WITH_TIMEOUT(paneAt(workspace, 0)->currentDirectory(),
+                              QFileInfo(directory.path()).absoluteFilePath(), 3000);
+    QCOMPARE(paneAt(workspace, 1)->currentDirectory(), QString{});
+
+    // Starting twice must not restore over a directory the user selected in the meantime.
+    QTemporaryDir selectedDirectory;
+    QVERIFY(selectedDirectory.isValid());
+    paneAt(workspace, 0)->openDirectory(selectedDirectory.path());
+    workspace.startDeferredInitialDirectory();
+    QCOMPARE(paneAt(workspace, 0)->currentDirectory(),
+             QFileInfo(selectedDirectory.path()).absoluteFilePath());
 }
 
 void QmlWorkspaceControllerTests::keepsPaneStateIndependent() {

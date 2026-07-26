@@ -76,7 +76,10 @@ int main(int argc, char* argv[]) {
     }
 
     const auto decoder = ispview::createDefaultImageDecoder();
-    ispview::BrowseWorkspaceController browseController(decoder, initialDirectory);
+    // Keep filesystem restoration out of the pre-window startup path. On a cold first launch,
+    // QML and shader caches are also being populated; touching a slow or unavailable previous
+    // directory here can otherwise prevent the first frame from appearing at all.
+    ispview::BrowseWorkspaceController browseController(decoder, initialDirectory, true);
     while (browseController.paneCount() < initialFileManagerCount)
         browseController.addFileManagerPane();
     ispview::CompareController compareController(browseController.loader());
@@ -101,6 +104,8 @@ int main(int argc, char* argv[]) {
     if (engine.rootObjects().isEmpty()) {
         return 1;
     }
+    QTimer::singleShot(250, &browseController,
+                       [&browseController] { browseController.startDeferredInitialDirectory(); });
 
     if (!displayMode.isEmpty()) {
         const int mode = displayMode == QStringLiteral("list")

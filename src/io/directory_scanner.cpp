@@ -5,7 +5,6 @@
 #include <QCollator>
 #include <QDir>
 #include <QDirIterator>
-#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QPointer>
 #include <QSet>
@@ -28,7 +27,6 @@ bool isDescendantPath(const QDir& root, const QString& candidate) {
 }
 
 constexpr int kScanBatchSize = 192;
-constexpr qint64 kScanBatchMilliseconds = 8;
 
 } // namespace
 
@@ -125,8 +123,6 @@ QVector<ImageFileRecord> DirectoryScanner::scanBatched(
     QVector<ImageFileRecord> result;
     QVector<ImageFileRecord> batch;
     batch.reserve(kScanBatchSize);
-    QElapsedTimer timer;
-    timer.start();
     QDirIterator iterator(directory,
                           QDir::AllEntries | QDir::Readable | QDir::NoDotAndDotDot |
                               QDir::NoSymLinks,
@@ -146,10 +142,11 @@ QVector<ImageFileRecord> DirectoryScanner::scanBatched(
         result.push_back(record);
         if (publishBatch) {
             batch.push_back(std::move(record));
-            if (batch.size() >= kScanBatchSize || timer.elapsed() >= kScanBatchMilliseconds) {
+            // A time-only threshold can degenerate into one queued UI update per entry on a slow
+            // disk. Keep a hard lower bound so the producer cannot overwhelm the GUI event loop.
+            if (batch.size() >= kScanBatchSize) {
                 publishBatch(std::exchange(batch, {}));
                 batch.reserve(kScanBatchSize);
-                timer.restart();
             }
         }
     }

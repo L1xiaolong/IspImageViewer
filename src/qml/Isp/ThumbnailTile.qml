@@ -15,8 +15,6 @@ Item {
     property bool selected: false
     property int selectionOrdinal: 0
     property int displayMode: 0
-    property bool fastScrolling: false
-    property bool nearViewport: false
     signal activated
     signal selectionRequested(bool extend, bool toggle)
 
@@ -62,15 +60,13 @@ Item {
                 Image {
                     anchors.fill: parent
                     anchors.margins: root.directory ? 28 : 0
-                    source: root.directory ? root.thumbnailUrl
-                                           : root.thumbnailUrl + (root.nearViewport
-                                                                  ? "&priority=near" : "")
+                    // Keep both URL and requested size stable while the GridView moves. Changing
+                    // either one cancels the current async response and briefly clears the texture,
+                    // which appears as periodic flashing during a long scroll.
+                    source: root.thumbnailUrl
                     asynchronous: true
                     cache: true
-                    sourceSize: root.fastScrolling
-                                ? Qt.size(128, 128)
-                                : Qt.size(Math.min(512, Math.max(256, width * 2)),
-                                          Math.min(512, Math.max(256, height * 2)))
+                    sourceSize: root.directory ? Qt.size(32, 32) : Qt.size(384, 384)
                     fillMode: root.directory ? Image.PreserveAspectFit : Image.PreserveAspectCrop
                 }
             }
@@ -127,12 +123,10 @@ Item {
                 Image {
                     anchors.fill: parent
                     anchors.margins: root.directory ? 14 : 0
-                    source: root.directory ? root.thumbnailUrl
-                                           : root.thumbnailUrl + (root.nearViewport
-                                                                  ? "&priority=near" : "")
+                    source: root.thumbnailUrl
                     asynchronous: true
                     cache: true
-                    sourceSize: root.fastScrolling ? Qt.size(128, 128) : Qt.size(256, 256)
+                    sourceSize: root.directory ? Qt.size(32, 32) : Qt.size(256, 256)
                     fillMode: root.directory ? Image.PreserveAspectFit : Image.PreserveAspectCrop
                 }
             }

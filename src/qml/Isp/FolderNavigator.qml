@@ -18,13 +18,12 @@ Rectangle {
     border.width: 0
     clip: true
 
-    // ── VS Code-style constants ──
-    readonly property int indentWidth: 16
+    // ── Standard-style constants ──
+    readonly property int indentWidth: 18
     readonly property int itemHeight: 24
     readonly property int iconSize_: 16
-    readonly property string chevronDown: "⌄"
-    readonly property string chevronRight: "›"
-    readonly property color indentGuideColor: "#D5D9DC"
+    readonly property string chevronDown: "▾"
+    readonly property string chevronRight: "▸"
     readonly property color selectionBg: "#E4E6F1"
     readonly property color hoverBg: Theme.softHover
 
@@ -167,29 +166,6 @@ Rectangle {
                            : treeMouse.containsMouse ? root.hoverBg : "transparent"
                 }
 
-                // ── Indent guides ──
-                Row {
-                    anchors.left: parent.left
-                    anchors.top: parent.top
-                    anchors.bottom: parent.bottom
-                    Repeater {
-                        model: treeDelegate.depth
-                        delegate: Rectangle {
-                            width: root.indentWidth
-                            height: parent.height
-                            color: "transparent"
-                            // Vertical indent guide line on the right edge of each indent cell
-                            Rectangle {
-                                anchors.right: parent.right
-                                anchors.top: parent.top
-                                anchors.bottom: parent.bottom
-                                width: 1
-                                color: root.indentGuideColor
-                                opacity: 0.55
-                            }
-                        }
-                    }
-                }
 
                 // ── Expand/collapse chevron ──
                 Text {

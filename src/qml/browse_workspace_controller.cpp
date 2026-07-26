@@ -12,11 +12,17 @@
 namespace ispview {
 
 BrowseWorkspaceController::BrowseWorkspaceController(
-    std::shared_ptr<const IImageDecoder> decoder, const QString& initialDirectory, QObject* parent)
+    std::shared_ptr<const IImageDecoder> decoder, const QString& initialDirectory,
+    bool deferInitialDirectory, QObject* parent)
     : QObject(parent), loader_(new ImageLoader(std::move(decoder), this)),
       folderTreeModel_(new QFileSystemModel(this)) {
     emptyPane_ = new BrowseController(loader_, folderTreeModel_, {}, true, this);
-    panes_.append(createPane(initialDirectory, false));
+    panes_.append(createPane(deferInitialDirectory ? QString{} : initialDirectory,
+                             deferInitialDirectory));
+    if (deferInitialDirectory) {
+        deferredInitialDirectory_ = initialDirectory;
+        deferredInitialDirectoryPending_ = true;
+    }
     activePaneIndex_ = 0;
     recomputeSelection();
 }
@@ -175,6 +181,15 @@ void BrowseWorkspaceController::compareSelected() {
 
 void BrowseWorkspaceController::refreshAll() {
     for (BrowseController* pane : panes_) pane->refresh();
+}
+
+void BrowseWorkspaceController::startDeferredInitialDirectory() {
+    if (!deferredInitialDirectoryPending_) return;
+    deferredInitialDirectoryPending_ = false;
+    const QString initialDirectory = std::exchange(deferredInitialDirectory_, QString{});
+    if (!panes_.isEmpty()) {
+        panes_.constFirst()->restoreInitialDirectoryAsync(initialDirectory);
+    }
 }
 
 void BrowseWorkspaceController::recomputeSelection() {

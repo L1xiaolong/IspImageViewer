@@ -201,12 +201,6 @@ Rectangle {
         }
     }
 
-    Timer {
-        id: thumbnailSettle
-        interval: 80
-        repeat: false
-    }
-
     GridView {
         id: contactSheet
         objectName: "paneContactSheet-" + root.paneIndex
@@ -229,8 +223,6 @@ Rectangle {
         reuseItems: true
         cacheBuffer: Math.max(0, height)
         keyNavigationEnabled: root.active
-        onMovementEnded: thumbnailSettle.restart()
-
         delegate: Item {
             required property string path
             required property string fileName
@@ -246,9 +238,6 @@ Rectangle {
                                               : contactSheet.visualCellWidth
                 height: root.displayMode === 1 ? 68 : parent.height - 6
                 displayMode: root.displayMode
-                fastScrolling: contactSheet.moving || thumbnailSettle.running
-                nearViewport: parent.y + parent.height < contactSheet.contentY ||
-                              parent.y > contactSheet.contentY + contactSheet.height
                 controller: root.controller
                 workspaceController: root.workspaceController
                 path: parent.path

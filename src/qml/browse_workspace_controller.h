@@ -33,7 +33,8 @@ class BrowseWorkspaceController final : public QObject {
 
   public:
     BrowseWorkspaceController(std::shared_ptr<const IImageDecoder> decoder,
-                              const QString& initialDirectory = {}, QObject* parent = nullptr);
+                              const QString& initialDirectory = {},
+                              bool deferInitialDirectory = false, QObject* parent = nullptr);
 
     [[nodiscard]] QVariantList panes() const;
     [[nodiscard]] int paneCount() const { return static_cast<int>(panes_.size()); }
@@ -58,6 +59,7 @@ class BrowseWorkspaceController final : public QObject {
     Q_INVOKABLE void setActiveDisplayMode(int mode);
     Q_INVOKABLE void compareSelected();
     Q_INVOKABLE void refreshAll();
+    Q_INVOKABLE void startDeferredInitialDirectory();
 
   signals:
     void panesChanged();
@@ -78,6 +80,8 @@ class BrowseWorkspaceController final : public QObject {
     BrowseController* emptyPane_ = nullptr;
     QVector<BrowseController*> panes_;
     QStringList selectedImagePaths_;
+    QString deferredInitialDirectory_;
+    bool deferredInitialDirectoryPending_ = false;
     int activePaneIndex_ = -1;
     bool synchronizingRecentFolders_ = false;
 };

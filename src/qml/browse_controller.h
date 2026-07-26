@@ -93,6 +93,7 @@ class BrowseController final : public QObject {
 
     Q_INVOKABLE void openDirectory(const QString& path);
     Q_INVOKABLE void openDirectoryUrl(const QUrl& url);
+    void restoreInitialDirectoryAsync(const QString& initialDirectory = {});
     Q_INVOKABLE void chooseDirectory();
     Q_INVOKABLE void navigateBack();
     Q_INVOKABLE void navigateForward();
@@ -150,7 +151,8 @@ class BrowseController final : public QObject {
     void trashConfirmationRequested(int itemCount);
 
   private:
-    void openDirectoryInternal(const QString& path, bool addToHistory);
+    void openDirectoryInternal(const QString& path, bool addToHistory,
+                               bool pathAlreadyValidated = false);
     void rescanCurrentDirectory();
     void setStatusText(const QString& text);
     void updateSelection(const QStringList& paths);
@@ -176,6 +178,7 @@ class BrowseController final : public QObject {
     QString filterText_;
     int navigationHistoryIndex_ = -1;
     quint64 scanGeneration_ = 0;
+    quint64 directoryRequestGeneration_ = 0;
     bool incrementalScan_ = false;
     quint64 galleryRequestId_ = 0;
     int gridCellWidth_ = 196;

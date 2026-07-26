@@ -74,7 +74,10 @@ void BrowseController::initialize(const QString& initialDirectory, bool startEmp
         settings.setValue(QStringLiteral("browser/recentPolicyVersion"), recentPolicyVersion);
     }
     recentFolders_ = settings.value(QStringLiteral("browser/recentFolders")).toStringList();
-    recentFolders_.removeIf([](const QString& path) { return !QFileInfo(path).isDir(); });
+    // Do not probe every recent path during construction. A disconnected network share or
+    // sleeping removable drive can block QFileInfo long enough to make the app look hung before
+    // its first frame. Invalid entries are handled normally if the user chooses one.
+    recentFolders_.removeIf([](const QString& path) { return path.trimmed().isEmpty(); });
     gridCellWidth_ = std::clamp(settings.value(QStringLiteral("browser/qmlGridCellWidth"), 196).toInt(),
                                 168, 260);
     settings.remove(QStringLiteral("browser/qmlInspectorVisible"));
@@ -274,6 +277,39 @@ void BrowseController::openDirectory(const QString& path) { openDirectoryInterna
 
 void BrowseController::openDirectoryUrl(const QUrl& url) {
     if (url.isLocalFile()) openDirectoryInternal(url.toLocalFile(), true);
+}
+
+void BrowseController::restoreInitialDirectoryAsync(const QString& initialDirectory) {
+    QString startupDirectory = initialDirectory;
+    if (startupDirectory.isEmpty()) {
+        startupDirectory =
+            QSettings().value(QStringLiteral("browser/lastDirectory"), QDir::homePath()).toString();
+    }
+    const quint64 requestGeneration = ++directoryRequestGeneration_;
+    setStatusText(QStringLiteral("Restoring the previous folder…"));
+    const QPointer<BrowseController> self(this);
+    QThreadPool::globalInstance()->start(
+        [self, startupDirectory, requestGeneration] {
+            QFileInfo startupInfo(startupDirectory);
+            QString resolvedDirectory;
+            if (startupInfo.isDir() && DirectoryScanner::isBrowsableEntry(startupInfo)) {
+                resolvedDirectory = startupInfo.absoluteFilePath();
+            } else {
+                resolvedDirectory = QDir::homePath();
+            }
+            if (!self) return;
+            QMetaObject::invokeMethod(
+                self,
+                [self, resolvedDirectory, requestGeneration] {
+                    if (!self || self->directoryRequestGeneration_ != requestGeneration ||
+                        !self->currentDirectory_.isEmpty()) {
+                        return;
+                    }
+                    self->openDirectoryInternal(resolvedDirectory, true, true);
+                },
+                Qt::QueuedConnection);
+        },
+        100);
 }
 
 void BrowseController::chooseDirectory() {
@@ -716,9 +752,12 @@ void BrowseController::setGridCellWidth(int width) {
     emit gridCellWidthChanged();
 }
 
-void BrowseController::openDirectoryInternal(const QString& path, bool addToHistory) {
+void BrowseController::openDirectoryInternal(const QString& path, bool addToHistory,
+                                             bool pathAlreadyValidated) {
+    ++directoryRequestGeneration_;
     const QFileInfo info(path);
-    if (!info.exists() || !info.isDir() || !DirectoryScanner::isBrowsableEntry(info)) {
+    if (!pathAlreadyValidated &&
+        (!info.exists() || !info.isDir() || !DirectoryScanner::isBrowsableEntry(info))) {
         setStatusText(QStringLiteral("Folder is hidden, unreadable, or unavailable: %1").arg(path));
         return;
     }

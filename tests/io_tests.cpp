@@ -637,7 +637,7 @@ void IoTests::directoryScannerPublishesIncrementalBatches() {
             });
     expectedGeneration = scanner.scanAsync(directory.path());
     QTRY_VERIFY_WITH_TIMEOUT(finished, 5000);
-    QVERIFY(batchCount >= 3);
+    QCOMPARE(batchCount, 3);
     QCOMPARE(publishedItems, 450);
 }
 
