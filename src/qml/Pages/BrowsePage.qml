@@ -977,6 +977,12 @@ Rectangle {
                         color: galleryMouse.containsMouse ? "#F1F5F7" : "transparent"
                         border.color: galleryDelegate.GridView.isCurrentItem ? "#6C8799" : galleryDelegate.isSelected ? "#B7C6D0" : "transparent"
                         border.width: galleryDelegate.GridView.isCurrentItem ? 2 : 1
+                        ToolTip.delay: 500
+                        ToolTip.timeout: 8000
+                        ToolTip.visible: galleryMouse.containsMouse &&
+                                         !galleryDragHandler.active &&
+                                         galleryDelegate.path.length > 0
+                        ToolTip.text: galleryDelegate.path
 
                         Image {
                             id: galleryPreview

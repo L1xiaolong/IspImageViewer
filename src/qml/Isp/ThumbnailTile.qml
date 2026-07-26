@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 // qmllint disable unqualified
 import QtQuick
+import QtQuick.Controls
 import "."
 
 Item {
@@ -15,6 +16,10 @@ Item {
     property bool selected: false
     property int selectionOrdinal: 0
     property int displayMode: 0
+    readonly property string pathToolTipText: ToolTip.text
+    readonly property bool pathToolTipVisible: ToolTip.visible
+    readonly property int pathToolTipDelay: ToolTip.delay
+    readonly property bool pathHoverActive: tileMouse.containsMouse
     signal activated
     signal selectionRequested(bool extend, bool toggle)
 
@@ -27,7 +32,13 @@ Item {
     Drag.hotSpot.y: Math.min(root.height / 2, 60)
 
     width: GridView.view ? GridView.view.cellWidth - 16 : 196
-    height: displayMode === 1 ? 68 : width * 0.75 + (displayMode === 2 ? 40 : 66)
+    height: displayMode === 1 ? 68 : width * 0.75 + (displayMode === 2 ? 36 : 58)
+
+    ToolTip.delay: 500
+    ToolTip.timeout: 8000
+    ToolTip.visible: tileMouse.containsMouse && !tileDragHandler.active &&
+                     root.path.length > 0
+    ToolTip.text: root.path
 
     Loader {
         anchors.fill: parent
@@ -51,7 +62,7 @@ Item {
                 anchors.top: parent.top
                 anchors.leftMargin: 8
                 anchors.rightMargin: 8
-                anchors.topMargin: 8
+                anchors.topMargin: 6
                 height: Math.round(width * 0.75)
                 color: Theme.softHover
                 border.color: Theme.opticalGray
@@ -88,12 +99,13 @@ Item {
             }
             Text {
                 id: gridName
+                objectName: "gridFileName"
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: imageWell.bottom
                 anchors.leftMargin: 8
                 anchors.rightMargin: 8
-                anchors.topMargin: 8
+                anchors.topMargin: 5
                 text: root.fileName
                 elide: Text.ElideMiddle
                 color: Theme.graphiteInk
@@ -101,16 +113,19 @@ Item {
                 font.pixelSize: 13
             }
             Text {
+                id: gridTechnicalLabel
+                objectName: "gridTechnicalLabel"
                 visible: root.displayMode !== 2
                 anchors.left: gridName.left
                 anchors.right: gridName.right
                 anchors.top: gridName.bottom
-                anchors.topMargin: 4
+                anchors.topMargin: 1
                 text: root.technicalLabel
                 elide: Text.ElideRight
                 color: Theme.mutedInk
                 font.family: Theme.monoFont
-                font.pixelSize: 11
+                font.pixelSize: 10
+                font.letterSpacing: -0.15
             }
         }
     }
@@ -178,15 +193,18 @@ Item {
                 font.weight: Font.Medium
             }
             Text {
+                id: listTechnicalLabel
+                objectName: "listTechnicalLabel"
                 anchors.left: listName.left
                 anchors.right: listName.right
                 anchors.top: listName.bottom
-                anchors.topMargin: 5
+                anchors.topMargin: 2
                 text: root.technicalLabel
                 elide: Text.ElideRight
                 color: Theme.mutedInk
                 font.family: Theme.monoFont
-                font.pixelSize: 11
+                font.pixelSize: 10
+                font.letterSpacing: -0.15
             }
         }
     }
@@ -245,6 +263,7 @@ Item {
 
     MouseArea {
         id: tileMouse
+        objectName: "thumbnailMouseArea"
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         hoverEnabled: true

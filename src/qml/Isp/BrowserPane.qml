@@ -225,7 +225,7 @@ Rectangle {
             width >= 380 ? Math.max(144, Math.floor((width - 24) / 2))
                          : Math.max(144, width - 16))
         cellWidth: root.displayMode === 1 ? width : visualCellWidth + 12
-        cellHeight: root.displayMode === 1 ? 76 : Math.round(visualCellWidth * 0.75) + 74
+        cellHeight: root.displayMode === 1 ? 76 : Math.round(visualCellWidth * 0.75) + 62
         boundsBehavior: Flickable.StopAtBounds
         interactive: root.contentInteractionEnabled
         reuseItems: true

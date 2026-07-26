@@ -113,6 +113,8 @@ TestCase {
     ThumbnailTile {
         id: directoryTile
         visible: false
+        x: 1060
+        y: 620
         width: 196
         controller: testCase.mockController
         workspaceController: mockWorkspace
@@ -161,20 +163,41 @@ TestCase {
         directoryTile.displayMode = 0
         wait(0)
         const gridIcon = findChild(directoryTile, "gridFolderIcon")
+        const gridInfo = findChild(directoryTile, "gridTechnicalLabel")
         verify(gridIcon !== null)
+        verify(gridInfo !== null)
         compare(gridIcon.width, gridIcon.height)
         verify(gridIcon.sourceSize.width >= 160)
         compare(gridIcon.sourceSize.width, gridIcon.sourceSize.height)
         compare(gridIcon.fillMode, Image.PreserveAspectFit)
+        compare(gridInfo.font.pixelSize, 10)
+        verify(gridInfo.anchors.topMargin <= 2)
 
         directoryTile.displayMode = 1
         wait(0)
         const listIcon = findChild(directoryTile, "listFolderIcon")
+        const listInfo = findChild(directoryTile, "listTechnicalLabel")
         verify(listIcon !== null)
+        verify(listInfo !== null)
         compare(listIcon.width, listIcon.height)
         verify(listIcon.sourceSize.width >= 96)
         compare(listIcon.sourceSize.width, listIcon.sourceSize.height)
         compare(listIcon.fillMode, Image.PreserveAspectFit)
+        compare(listInfo.font.pixelSize, 10)
+        verify(listInfo.anchors.topMargin <= 2)
+    }
+
+    function test_thumbnailHoverShowsTheCompletePath() {
+        mouseMove(browsePage, browsePage.width / 2, browsePage.height / 2)
+        directoryTile.displayMode = 0
+        directoryTile.visible = true
+        wait(0)
+        compare(directoryTile.pathToolTipText, directoryTile.path)
+        compare(directoryTile.pathToolTipDelay, 500)
+        mouseMove(directoryTile, directoryTile.width / 2, directoryTile.height / 2)
+        tryCompare(directoryTile, "pathHoverActive", true, 1000)
+        mouseMove(browsePage, browsePage.width / 2, browsePage.height / 2)
+        directoryTile.visible = false
     }
 
     function test_propertiesAndRawCardsCanBeDraggedByTheirHeaders() {
