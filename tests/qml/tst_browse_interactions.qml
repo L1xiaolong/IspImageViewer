@@ -130,23 +130,34 @@ TestCase {
 
     function test_folderNavigatorUsesNativePlatformOrganization() {
         const navigator = findChild(browsePage, "folderNavigator")
-        const favoritesHeading = findChild(navigator, "nativeFavoritesHeading")
+        const recentHeading = findChild(navigator, "nativeRecentHeading")
+        const quickAccessHeading = findChild(navigator, "nativeQuickAccessHeading")
         const locationsHeading = findChild(navigator, "nativeLocationsHeading")
         const nativeTree = findChild(navigator, "nativeFolderTree")
         verify(navigator !== null)
-        verify(favoritesHeading !== null)
+        verify(recentHeading !== null)
+        verify(quickAccessHeading !== null)
         verify(locationsHeading !== null)
         verify(nativeTree !== null)
 
         navigator.platformName = "windows"
-        compare(favoritesHeading.text, "Quick access")
-        compare(locationsHeading.text, "This PC")
+        compare(recentHeading.text, "Recent")
+        compare(quickAccessHeading.text, "Quick Access")
+        compare(locationsHeading.text, "Locations")
         compare(navigator.macStyle, false)
 
         navigator.platformName = "osx"
-        compare(favoritesHeading.text, "Favorites")
+        compare(recentHeading.text, "Recent")
+        compare(quickAccessHeading.text, "Quick Access")
         compare(locationsHeading.text, "Locations")
         compare(navigator.macStyle, true)
+
+        compare(navigator.recentEntries().length,
+                mockController.recentFolders.length)
+        compare(navigator.quickAccessEntries().length,
+                mockController.nativeSidebarPlaces.length)
+        for (let index = 0; index < navigator.recentEntries().length; ++index)
+            compare(navigator.recentEntries()[index].kind, "recent")
     }
 
     function test_folderEntitiesUseTheCurrentPlatformIcon() {

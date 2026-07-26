@@ -54,6 +54,12 @@ Rectangle {
                 seen[key] = true
             }
         }
+        return entries
+    }
+
+    function recentEntries() {
+        const entries = []
+        const seen = ({})
         const recent = root.controller.recentFolders || []
         for (let index = 0; index < recent.length && index < 4; ++index) {
             const path = String(recent[index])
@@ -89,6 +95,56 @@ Rectangle {
 
     Component.onCompleted: root.revealCurrentFolder()
 
+    component SidebarPlace: Rectangle {
+        required property var entry
+
+        Layout.fillWidth: true
+        implicitHeight: root.itemHeight
+        color: "transparent"
+        readonly property bool selected:
+            String(entry.path) === root.controller.currentDirectory
+
+        Rectangle {
+            anchors.fill: parent
+            anchors.leftMargin: root.macStyle ? 6 : 0
+            anchors.rightMargin: root.macStyle ? 6 : 0
+            anchors.topMargin: root.macStyle ? 1 : 0
+            anchors.bottomMargin: root.macStyle ? 1 : 0
+            radius: root.macStyle ? 5 : 0
+            color: parent.selected ? root.selectionBg
+                   : sidebarPlaceMouse.containsMouse ? root.hoverBg : "transparent"
+        }
+
+        Image {
+            x: root.macStyle ? 14 : 18
+            anchors.verticalCenter: parent.verticalCenter
+            width: root.iconSize_
+            height: root.iconSize_
+            source: root.folderIcon(parent.selected)
+            sourceSize: Qt.size(32, 32)
+            opacity: root.macStyle ? 0.86 : 1
+        }
+
+        Text {
+            x: root.macStyle ? 40 : 46
+            width: Math.max(0, parent.width - x - 12)
+            anchors.verticalCenter: parent.verticalCenter
+            text: parent.entry.label
+            elide: Text.ElideMiddle
+            color: parent.selected && root.macStyle ? "white" : root.sidebarText
+            font.family: root.nativeFont
+            font.pixelSize: root.macStyle ? 13 : 12
+        }
+
+        MouseArea {
+            id: sidebarPlaceMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            acceptedButtons: Qt.LeftButton
+            onClicked: root.controller.openDirectory(parent.entry.path)
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
@@ -104,12 +160,44 @@ Rectangle {
             color: "transparent"
 
             Text {
-                id: favoritesHeading
-                objectName: "nativeFavoritesHeading"
+                id: recentHeading
+                objectName: "nativeRecentHeading"
                 anchors.left: parent.left
                 anchors.leftMargin: root.macStyle ? 12 : 14
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.macStyle ? "Favorites" : "Quick access"
+                text: "Recent"
+                color: root.macStyle ? "#777777" : "#3B3B3B"
+                font.family: root.nativeFont
+                font.pixelSize: root.macStyle ? 11 : 12
+                font.weight: Font.DemiBold
+            }
+        }
+
+        Repeater {
+            model: root.browsingEnabled ? root.recentEntries() : []
+            delegate: SidebarPlace {
+                required property var modelData
+                entry: modelData
+            }
+        }
+
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: root.macStyle ? 9 : 6
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: root.macStyle ? 25 : 30
+            color: "transparent"
+
+            Text {
+                id: quickAccessHeading
+                objectName: "nativeQuickAccessHeading"
+                anchors.left: parent.left
+                anchors.leftMargin: root.macStyle ? 12 : 14
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Quick Access"
                 color: root.macStyle ? "#777777" : "#3B3B3B"
                 font.family: root.nativeFont
                 font.pixelSize: root.macStyle ? 11 : 12
@@ -119,55 +207,9 @@ Rectangle {
 
         Repeater {
             model: root.browsingEnabled ? root.quickAccessEntries() : []
-
-            delegate: Rectangle {
-                id: placeDelegate
+            delegate: SidebarPlace {
                 required property var modelData
-                Layout.fillWidth: true
-                implicitHeight: root.itemHeight
-                color: "transparent"
-                readonly property bool selected:
-                    String(placeDelegate.modelData.path) === root.controller.currentDirectory
-
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.leftMargin: root.macStyle ? 6 : 0
-                    anchors.rightMargin: root.macStyle ? 6 : 0
-                    anchors.topMargin: root.macStyle ? 1 : 0
-                    anchors.bottomMargin: root.macStyle ? 1 : 0
-                    radius: root.macStyle ? 5 : 0
-                    color: placeDelegate.selected ? root.selectionBg
-                           : placeMouse.containsMouse ? root.hoverBg : "transparent"
-                }
-
-                Image {
-                    x: root.macStyle ? 14 : 18
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: root.iconSize_
-                    height: root.iconSize_
-                    source: root.folderIcon(placeDelegate.selected)
-                    sourceSize: Qt.size(32, 32)
-                    opacity: root.macStyle ? 0.86 : 1
-                }
-
-                Text {
-                    x: root.macStyle ? 40 : 46
-                    width: Math.max(0, parent.width - x - 12)
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: placeDelegate.modelData.label
-                    elide: Text.ElideMiddle
-                    color: placeDelegate.selected && root.macStyle ? "white" : root.sidebarText
-                    font.family: root.nativeFont
-                    font.pixelSize: root.macStyle ? 13 : 12
-                }
-
-                MouseArea {
-                    id: placeMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    acceptedButtons: Qt.LeftButton
-                    onClicked: root.controller.openDirectory(placeDelegate.modelData.path)
-                }
+                entry: modelData
             }
         }
 
@@ -187,7 +229,7 @@ Rectangle {
                 anchors.left: parent.left
                 anchors.leftMargin: root.macStyle ? 12 : 14
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.macStyle ? "Locations" : "This PC"
+                text: "Locations"
                 color: root.macStyle ? "#777777" : "#3B3B3B"
                 font.family: root.nativeFont
                 font.pixelSize: root.macStyle ? 11 : 12
